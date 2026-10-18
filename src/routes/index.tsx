@@ -20,6 +20,7 @@ import {
 } from "@/data/football";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
+import { formatTimeGhana, isoDateGhana } from "@/lib/ghana-time";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,10 +52,9 @@ function FixtureRow({
 
   const isHot = match.hot || parseInt(match.id.replace(/\D/g, "") || "0") % 2 === 0;
 
-  // Format Kickoff Time e.g. "10:30 PM"
+  // Format Kickoff Time in Ghana GMT e.g. "10:30 PM"
   const kickoffTimeStr = useMemo(() => {
-    const d = new Date(match.kickoff);
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    return formatTimeGhana(match.kickoff);
   }, [match.kickoff]);
 
   // Determine market options based on active market selection tab
@@ -283,19 +283,35 @@ function HomePage() {
     });
   }, [allMatches, selectedSport]);
 
-  // Group fixtures by Date bucket (Today vs Tomorrow)
+  // Group fixtures by Date bucket (Today vs Tomorrow) using Ghana time
   const groupedFixtures = useMemo(() => {
-    const buckets: Record<string, Match[]> = { TODAY: [], TOMORROW: [] };
+    const buckets: { TODAY: Match[]; TOMORROW: Match[] } = { TODAY: [], TOMORROW: [] };
     for (const m of filteredFixtures) {
       const b = dayBucket(m.kickoff);
       if (b === "Today" || m.status === "LIVE") {
-        buckets["TODAY"].push(m);
+        buckets.TODAY.push(m);
       } else {
-        buckets["TOMORROW"].push(m);
+        buckets.TOMORROW.push(m);
       }
     }
     return buckets;
   }, [filteredFixtures]);
+
+  // Dynamic Ghana date labels for the section headers
+  const todayLabel = useMemo(() => {
+    const d = new Date(isoDateGhana(0) + "T12:00:00Z");
+    return d.toLocaleDateString("en-US", { weekday: "long", month: "2-digit", day: "2-digit", timeZone: "Africa/Accra" });
+  }, []);
+  const todayShort = useMemo(() => {
+    const d = new Date(isoDateGhana(0) + "T12:00:00Z");
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", timeZone: "Africa/Accra" })
+      + " " + d.toLocaleDateString("en-US", { weekday: "short", timeZone: "Africa/Accra" });
+  }, []);
+  const tomorrowShort = useMemo(() => {
+    const d = new Date(isoDateGhana(1) + "T12:00:00Z");
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", timeZone: "Africa/Accra" })
+      + " " + d.toLocaleDateString("en-US", { weekday: "short", timeZone: "Africa/Accra" });
+  }, []);
 
   return (
     <div className="flex flex-col bg-[#0e0e11] min-h-screen text-white font-sans select-none">
@@ -555,9 +571,9 @@ function HomePage() {
 
       {/* 6. FIXTURES DATE BUCKETS (TODAY / TOMORROW) */}
       <div className="bg-[#0e0e11] flex-1">
-        {/* Date header bar: Tuesday, 09/29 | LIVE ODDS - 1662 matches */}
+        {/* Date header bar: dynamic Ghana date | LIVE ODDS */}
         <div className="flex items-center justify-between px-3 py-2 bg-[#17171d] border-b border-[#21212a] text-xs font-bold text-gray-200">
-          <span>Tuesday, 09/29</span>
+          <span>{todayLabel}</span>
           <span className="flex items-center gap-1 text-[#F5C400] text-[11px]">
             <Radio className="h-3 w-3" /> LIVE ODDS · 1662 matches
           </span>
@@ -567,12 +583,12 @@ function HomePage() {
         <div>
           <div className="flex items-center justify-between px-3 py-2 bg-[#121217] text-xs font-black text-[#F5C400]">
             <span>TODAY</span>
-            <span className="text-gray-400 text-[11px]">3</span>
+            <span className="text-gray-400 text-[11px]">{groupedFixtures.TODAY.length}</span>
           </div>
 
-          {/* Sub-header bar: 29/09 Tue | 1 X 2 */}
+          {/* Sub-header bar: dynamic today date | 1 X 2 */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#17171d] border-y border-[#21212a] text-[11px] font-extrabold text-gray-400">
-            <span>29/09 Tue</span>
+            <span>{todayShort}</span>
             <div className="flex items-center gap-1.5 pr-0.5">
               {["1", "X", "2"].map((h) => (
                 <span key={h} className="w-12 sm:w-14 text-center">
@@ -583,7 +599,7 @@ function HomePage() {
           </div>
 
           {/* Fixture Rows for TODAY */}
-          {groupedFixtures["TODAY"].map((m) => (
+          {groupedFixtures.TODAY.map((m) => (
             <FixtureRow key={m.id} match={m} selectedMarket={activeMarket} />
           ))}
         </div>
@@ -593,13 +609,13 @@ function HomePage() {
           <div className="flex items-center justify-between px-3 py-2 bg-[#121217] text-xs font-black text-[#F5C400]">
             <span>TOMORROW</span>
             <span className="text-gray-400 text-[11px]">
-              {groupedFixtures["TOMORROW"].length || 12}
+              {groupedFixtures.TOMORROW.length || 12}
             </span>
           </div>
 
-          {/* Sub-header bar: 30/09 Wed | 1 X 2 */}
+          {/* Sub-header bar: dynamic tomorrow date | 1 X 2 */}
           <div className="flex items-center justify-between px-3 py-1.5 bg-[#17171d] border-y border-[#21212a] text-[11px] font-extrabold text-gray-400">
-            <span>30/09 Wed</span>
+            <span>{tomorrowShort}</span>
             <div className="flex items-center gap-1.5 pr-0.5">
               {["1", "X", "2"].map((h) => (
                 <span key={h} className="w-12 sm:w-14 text-center">
@@ -610,9 +626,9 @@ function HomePage() {
           </div>
 
           {/* Fixture Rows for TOMORROW */}
-          {(groupedFixtures["TOMORROW"].length > 0
-            ? groupedFixtures["TOMORROW"]
-            : groupedFixtures["TODAY"]
+          {(groupedFixtures.TOMORROW.length > 0
+            ? groupedFixtures.TOMORROW
+            : groupedFixtures.TODAY
           ).map((m) => (
             <FixtureRow key={`tomorrow_${m.id}`} match={m} selectedMarket={activeMarket} />
           ))}

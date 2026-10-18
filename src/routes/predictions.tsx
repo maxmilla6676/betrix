@@ -5,10 +5,10 @@ import { SectionHeading } from "@/components/common/States";
 export const Route = createFileRoute("/predictions")({
   head: () => ({
     meta: [
-      { title: "My Prediction Slip — BETRIX" },
-      { name: "description", content: "Review your BETRIX prediction slip, adjust your virtual points stake and generate a shareable prediction code." },
-      { property: "og:title", content: "My Prediction Slip — BETRIX" },
-      { property: "og:description", content: "Build football predictions with virtual points and share your prediction code." },
+      { title: "My Bet Slip — BETRIX" },
+      { name: "description", content: "Review your BETRIX bet slip, adjust your GHS stake and generate a shareable prediction code." },
+      { property: "og:title", content: "My Bet Slip — BETRIX" },
+      { property: "og:description", content: "Build football predictions with GHS Cedis balance and share your prediction code." },
     ],
   }),
   component: PredictionsPage,
@@ -16,9 +16,9 @@ export const Route = createFileRoute("/predictions")({
 
 function PredictionsPage() {
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <SectionHeading title="My prediction slip" subtitle="Virtual points only — no real money involved." />
-      <div className="surface-card rounded-3xl p-4">
+    <div className="mx-auto max-w-2xl space-y-4 p-3 md:p-6">
+      <SectionHeading title="My Bet Slip" subtitle="Place predictions with your GHS Cedis balance." />
+      <div className="bg-[#1C1936] border border-[#2A264F] rounded-3xl p-4">
         <SlipContent />
       </div>
     </div>

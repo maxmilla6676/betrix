@@ -30,6 +30,8 @@ import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
 import { BetrixLogo } from "@/components/brand/Logo";
 
+import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
+
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
@@ -42,11 +44,12 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const navigate = useNavigate();
-  const { profile, balance, history, isLoggedIn, logout, deposit, withdraw } = useBetrix();
+  const { profile, balance, history, transactions, isLoggedIn, logout, withdraw } = useBetrix();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [amount, setAmount] = useState(10);
-  const [method, setMethod] = useState<"momo" | "card" | "crypto">("momo");
+  const [withdrawAmount, setWithdrawAmount] = useState(50);
+  const [withdrawMethod, setWithdrawMethod] = useState("MTN Mobile Money");
+  const [withdrawAccount, setWithdrawAccount] = useState(profile.phone || "0205795789");
   const [showBalance, setShowBalance] = useState(true);
 
   useEffect(() => {
@@ -55,24 +58,19 @@ function ProfilePage() {
     }
   }, [isLoggedIn, navigate]);
 
-  const handleDeposit = (e: React.FormEvent) => {
-    e.preventDefault();
-    deposit(amount);
-    toast.success(`Deposit of GHS ${amount.toFixed(2)} successful via ${method.toUpperCase()}!`);
-    setDepositOpen(false);
-    setAmount(10);
-  };
-
   const handleWithdraw = (e: React.FormEvent) => {
     e.preventDefault();
-    if (amount > balance) {
+    if (withdrawAmount > balance) {
       toast.error("Insufficient balance for withdrawal!");
       return;
     }
-    withdraw(amount);
-    toast.success(`Withdrawal of GHS ${amount.toFixed(2)} successful!`);
-    setWithdrawOpen(false);
-    setAmount(10);
+    const success = withdraw(withdrawAmount, withdrawMethod, withdrawAccount);
+    if (success) {
+      toast.success(`Withdrawal of GHS ${withdrawAmount.toFixed(2)} initiated successfully!`);
+      setWithdrawOpen(false);
+    } else {
+      toast.error("Withdrawal failed due to insufficient funds.");
+    }
   };
 
   const handleSignOut = () => {
@@ -95,55 +93,8 @@ function ProfilePage() {
   return (
     <div className="min-h-screen bg-[#121026] text-white p-3 md:p-6 space-y-4 pb-24">
 
-      {/* ── DEPOSIT MODAL ── */}
-      <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
-        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-5 shadow-2xl">
-          <DialogHeader className="text-left border-b border-[#2A264F] pb-3">
-            <DialogTitle className="flex items-center gap-2 text-white font-black text-lg">
-              <CreditCard className="h-5 w-5 text-[#FFC82C]" /> Real Money Deposit (GHS)
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleDeposit} className="space-y-4 pt-2">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Payment Gateway Method</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "momo" as const, label: "MoMo Gateway", icon: <Smartphone className="h-4 w-4 text-[#FFC82C]" /> },
-                  { id: "card" as const, label: "Visa / Card", icon: <CreditCard className="h-4 w-4 text-blue-400" /> },
-                  { id: "crypto" as const, label: "Bank Pay", icon: <Coins className="h-4 w-4 text-emerald-400" /> },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setMethod(m.id)}
-                    className={cn(
-                      "p-2.5 rounded-xl border text-[11px] font-black flex flex-col items-center gap-1.5 transition-all text-center",
-                      method === m.id ? "bg-[#FFC82C] text-black border-transparent shadow-md" : "bg-[#252147] border-[#332E5E] text-gray-300 hover:border-gray-500",
-                    )}
-                  >
-                    {m.icon} {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Deposit Amount (GHS)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-[#FFC82C]">GHS</span>
-                <Input 
-                  type="number" 
-                  value={amount} 
-                  onChange={(e) => setAmount(Number(e.target.value))} 
-                  className="bg-[#252147] border-[#332E5E] text-white font-mono text-base font-bold pl-14 h-11 rounded-xl focus:border-[#FFC82C]" 
-                />
-              </div>
-            </div>
-            <Button type="submit" className="w-full bg-[#FFC82C] hover:bg-[#e0b024] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-lg">
-              Proceed to Payment Gateway
-            </Button>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* ── REAL PAYMENT GATEWAY MODAL ── */}
+      <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={300} />
 
       {/* ── WITHDRAWAL MODAL ── */}
       <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
@@ -155,18 +106,41 @@ function ProfilePage() {
           </DialogHeader>
           <form onSubmit={handleWithdraw} className="space-y-4 pt-2">
             <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Method</label>
+              <select
+                value={withdrawMethod}
+                onChange={(e) => setWithdrawMethod(e.target.value)}
+                className="w-full bg-[#252147] border-[#332E5E] text-white font-bold text-xs h-10 rounded-xl px-3 focus:outline-none focus:border-[#FFC82C]"
+              >
+                <option value="MTN Mobile Money">MTN Mobile Money</option>
+                <option value="Telecel Cash">Telecel Cash (Vodafone)</option>
+                <option value="AT Money">AT Money (AirtelTigo)</option>
+                <option value="Bank Account">Direct Bank Transfer</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mobile Number / Account</label>
+              <Input
+                type="text"
+                value={withdrawAccount}
+                onChange={(e) => setWithdrawAccount(e.target.value)}
+                className="bg-[#252147] border-[#332E5E] text-white font-mono text-sm font-bold h-10 rounded-xl focus:border-[#FFC82C]"
+              />
+            </div>
+            <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Withdrawal Amount (GHS)</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-[#FFC82C]">GHS</span>
                 <Input 
                   type="number" 
-                  value={amount} 
-                  onChange={(e) => setAmount(Number(e.target.value))} 
+                  min={1}
+                  value={withdrawAmount} 
+                  onChange={(e) => setWithdrawAmount(Number(e.target.value))} 
                   className="bg-[#252147] border-[#332E5E] text-white font-mono text-base font-bold pl-14 h-11 rounded-xl focus:border-[#FFC82C]" 
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full bg-[#232046] hover:bg-[#2e2a5b] text-white border border-[#3A356B] font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-md">
+            <Button type="submit" className="w-full bg-[#FFC82C] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-md">
               Submit Instant Cash Out
             </Button>
           </form>

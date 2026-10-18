@@ -1,33 +1,104 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Activity, ArrowLeft, ShieldCheck, Users2, Ticket, Trophy, Globe, RotateCw, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  ShieldCheck,
+  Users2,
+  Ticket,
+  Globe,
+  RotateCw,
+  RefreshCw,
+  DollarSign,
+  Calendar,
+  Percent,
+  Edit3,
+  Check,
+  Copy,
+  ExternalLink,
+  Clock,
+  Sparkles,
+  Share2,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+  Eye,
+  Mail,
+  Phone,
+  Radio,
+  ChevronDown,
+  Menu,
+  CreditCard,
+  Plus,
+  RotateCcw,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BetrixWordmark } from "@/components/brand/Logo";
 import { EmptyState, SectionHeading } from "@/components/common/States";
-import { adminUsers, auditLog, growthSeries, partners } from "@/data/admin";
+import { adminUsers, auditLog, growthSeries } from "@/data/admin";
 import { teamById, leagueById } from "@/data/football";
-import { formatPoints, useBetrix } from "@/store/betrix";
+import { useBetrix, formatGHS } from "@/store/betrix";
 import { FREE_SPORTS_SOURCES } from "@/services/sportsApi";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import {
+  DailyRevenueHistoryCard,
+  formatGHC,
+} from "@/components/admin/DailyRevenueHistoryCard";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
-      { title: "Admin Dashboard — BETRIX" },
-      { name: "description", content: "BETRIX operations console: platform metrics, user management, match settlement and audit trail." },
-      { property: "og:title", content: "Admin Dashboard — BETRIX" },
-      { property: "og:description", content: "Manage users, matches, partners and platform activity on BETRIX." },
+      { title: "Admin console — BETRIX" },
+      {
+        name: "description",
+        content:
+          "Review payments, partners, commission settings and platform activity.",
+      },
     ],
   }),
   component: AdminPage,
 });
 
+type AdminNavTab =
+  | "payments"
+  | "settings"
+  | "packages"
+  | "partners"
+  | "users"
+  | "matches"
+  | "audit";
+
 function AdminPage() {
   const [q, setQ] = useState("");
+  const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
+  const [editRateInput, setEditRateInput] = useState<number>(15);
+  const [copiedPartnerRegLink, setCopiedPartnerRegLink] = useState(false);
+  const [copiedUserLinkCode, setCopiedUserLinkCode] = useState<string | null>(null);
+  const [pendingRates, setPendingRates] = useState<Record<string, number>>({});
+  // Start with true (open) or allow user toggle via small calendar logo
+  const [showDailyHistory, setShowDailyHistory] = useState(true);
+  const [activeTab, setActiveTab] = useState<AdminNavTab>("payments");
+
   const {
+    totalRevenue,
+    todayRevenue,
+    devCommission,
+    totalPartnersCount,
+    totalUsersCount,
+    activeAnalysesCount,
+    pendingPaymentsCount,
+    resetAllStatsToZero,
+    loadScreenshotStats,
+    simulateDeposit,
+    transactions,
+    history,
+    partnersList,
+    updatePartnerCommission,
+    approvePartner,
+    rejectPartner,
     allMatches,
     apiMatches,
     isApiLoading,
@@ -39,240 +110,720 @@ function AdminPage() {
     setEnableLiveApi,
   } = useBetrix();
 
-  const filteredUsers = adminUsers.filter((u) =>
-    `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase()),
-  );
-  const maxSlips = Math.max(...growthSeries.map((g) => g.slips));
+  const pendingPartners = partnersList.filter((p) => p.status === "PENDING");
+  const approvedPartners = partnersList.filter((p) => p.status !== "PENDING");
 
-  const stats = [
-    { label: "Total users", value: "4,812", icon: Users2 },
-    { label: "Slips this week", value: "4,190", icon: Ticket },
-    { label: "Live matches", value: String(allMatches.filter((m) => m.status === "LIVE").length), icon: Activity },
-    { label: "API Fixtures Loaded", value: String(apiMatches.length), icon: Globe },
-  ];
+  const partnerRegUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/partner-register`
+      : "https://betrix.app/partner-register";
+
+  const handleCopyPartnerRegLink = () => {
+    navigator.clipboard.writeText(partnerRegUrl);
+    setCopiedPartnerRegLink(true);
+    toast.success("Partner registration link copied! Send to prospective partners.");
+    setTimeout(() => setCopiedPartnerRegLink(false), 2500);
+  };
+
+  const handleCopyUserLink = (code: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://betrix.app";
+    const userLink = `${origin}/auth?mode=signup&ref=${code}`;
+    navigator.clipboard.writeText(userLink);
+    setCopiedUserLinkCode(code);
+    toast.success(`Unique referral link for ${code} copied!`);
+    setTimeout(() => setCopiedUserLinkCode(null), 2500);
+  };
+
+  const handleApprovePartner = (partnerId: string, partnerName: string) => {
+    const customRate = pendingRates[partnerId] ?? 12;
+    approvePartner(partnerId, customRate);
+    toast.success(`Approved ${partnerName}! Referral link active with ${customRate}% commission.`);
+  };
+
+  const handleRejectPartner = (partnerId: string, partnerName: string) => {
+    rejectPartner(partnerId, "Application rejected by admin");
+    toast.error(`Partner application for ${partnerName} rejected.`);
+  };
+
+  const handleResetStats = () => {
+    resetAllStatsToZero();
+    toast.success("All platform revenue, stat cards, and metrics reset to GH₵0.");
+  };
+
+  const handleRestoreScreenshotStats = () => {
+    loadScreenshotStats();
+    toast.success("Loaded reference stats matching the screenshot!");
+  };
+
+  const filteredUsers = adminUsers.filter((u) =>
+    `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase())
+  );
+
+  const handleSaveCommission = (partnerId: string, partnerName: string) => {
+    updatePartnerCommission(partnerId, editRateInput);
+    toast.success(`Updated ${partnerName}'s commission percentage to ${editRateInput}%`);
+    setEditingPartnerId(null);
+  };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 lg:px-6">
-          <BetrixWordmark />
-          <Badge variant="secondary" className="w-fit gap-1 text-[10px] uppercase tracking-wider">
-            <ShieldCheck className="h-3 w-3" /> Admin console
-          </Badge>
-          <Button asChild variant="ghost" size="sm" className="gap-1.5">
-            <Link to="/">
-              <ArrowLeft className="h-4 w-4" /> Exit
+    <div className="min-h-screen bg-[#f8f9fc] text-gray-900 font-sans selection:bg-[#E41B23] selection:text-white select-none pb-24">
+      {/* ── TOP NAV HEADER (Exact Match: Logo left | '5 credits' + Menu right) ── */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <Link to="/" aria-label="BETRIX home" className="flex items-center gap-1.5 active:scale-95 transition-transform">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-tr from-red-600 to-rose-500 text-white font-black text-xs shadow-xs">
+                ▼
+              </span>
+              <BetrixWordmark />
             </Link>
-          </Button>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-bold border border-gray-200">
+              5 credits
+            </span>
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 rounded-lg text-gray-700 hover:bg-gray-100"
+            >
+              <Link to="/" title="Exit to website">
+                <Menu className="h-5 w-5" />
+              </Link>
+            </Button>
+          </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 lg:px-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {stats.map((s) => (
-            <div key={s.label} className="surface-card rounded-2xl p-4">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <s.icon className="h-4 w-4 text-primary" />
-                <p className="truncate text-[11px]">{s.label}</p>
-              </div>
-              <p className="tabular mt-2 text-2xl font-extrabold">{s.value}</p>
-            </div>
-          ))}
+      {/* ── MAIN DASHBOARD CONTAINER ── */}
+      <main className="mx-auto max-w-4xl px-4 py-5 space-y-4">
+        {/* Title & Description (Exact Screenshot Typography) */}
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 tracking-tight">
+            Admin console
+          </h1>
+          <p className="text-xs text-gray-500 font-medium">
+            Review payments, partners, commission settings and platform activity.
+          </p>
         </div>
 
-        <Tabs defaultValue="overview">
-          <TabsList className="w-full justify-start overflow-x-auto">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="sports-api">Sports API</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="matches">Matches</TabsTrigger>
-            <TabsTrigger value="partners">Partners</TabsTrigger>
-            <TabsTrigger value="audit">Audit log</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="mt-4 space-y-4">
-            <div className="surface-card rounded-2xl p-4">
-              <SectionHeading title="Weekly activity" subtitle="New users and slips submitted" />
-              <div className="flex h-44 items-end gap-3">
-                {growthSeries.map((g) => (
-                  <div key={g.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                    <div className="flex h-full w-full items-end justify-center gap-1">
-                      <div className="w-1/3 rounded-t bg-primary/30" style={{ height: `${(g.users / maxSlips) * 100}%` }} aria-hidden />
-                      <div className="w-1/3 rounded-t bg-primary" style={{ height: `${(g.slips / maxSlips) * 100}%` }} aria-hidden />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground">{g.label}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">Light bars: new users · Solid bars: slips submitted</p>
+        {/* ── TOP STAT CARDS (2 Columns: Vibrant Red-Purple-Blue Gradient) ── */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* 1. Total Revenue Card */}
+          <div className="relative rounded-2xl p-4 md:p-5 text-white shadow-md bg-gradient-to-r from-[#cf143a] via-[#7329cd] to-[#2552df] overflow-hidden flex flex-col justify-between min-h-[110px]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white/90 tracking-wide">
+                Total Revenue
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/80" />
             </div>
-          </TabsContent>
+            <p className="text-2xl md:text-3xl font-black font-mono tracking-tight text-white mt-2">
+              {formatGHC(totalRevenue)}
+            </p>
+          </div>
 
-          <TabsContent value="sports-api" className="mt-4 space-y-4">
-            <div className="surface-card rounded-2xl p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+          {/* 2. Today's Revenue Card (With small calendar logo at bottom right!) */}
+          <div className="relative rounded-2xl p-4 md:p-5 text-white shadow-md bg-gradient-to-r from-[#cf143a] via-[#7329cd] to-[#2552df] overflow-hidden flex flex-col justify-between min-h-[110px]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-white/90 tracking-wide leading-tight">
+                Today's<br className="sm:hidden" /> Revenue
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/80" />
+            </div>
+            <p className="text-2xl md:text-3xl font-black font-mono tracking-tight text-white mt-2">
+              {formatGHC(todayRevenue)}
+            </p>
+
+            {/* Small Calendar Logo on the Right Bottom */}
+            <button
+              type="button"
+              onClick={() => setShowDailyHistory(!showDailyHistory)}
+              title={showDailyHistory ? "Hide Daily Revenue History" : "Show Daily Revenue History"}
+              className={cn(
+                "absolute right-3.5 bottom-3.5 p-2 rounded-xl backdrop-blur-xs border transition-all cursor-pointer shadow-2xs",
+                showDailyHistory
+                  ? "bg-white/30 border-white/40 ring-2 ring-white/50"
+                  : "bg-white/20 hover:bg-white/30 border-white/25 active:scale-95"
+              )}
+            >
+              <Calendar className="h-4 w-4 text-white" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── DAILY REVENUE HISTORY (Triggered by calendar logo, exact match) ── */}
+        {showDailyHistory && (
+          <div className="animate-in fade-in-50 duration-300">
+            <DailyRevenueHistoryCard />
+          </div>
+        )}
+
+        {/* ── MIDDLE & BOTTOM STAT CARDS (2x2 Grid with Red Chevron) ── */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Card 3: Partners */}
+          <div
+            onClick={() => setActiveTab("partners")}
+            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
+          >
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-bold">Partners</span>
+              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+            </div>
+            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
+              {totalPartnersCount}
+            </p>
+          </div>
+
+          {/* Card 4: Members */}
+          <div
+            onClick={() => setActiveTab("users")}
+            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
+          >
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-bold">Members</span>
+              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+            </div>
+            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
+              {totalUsersCount}
+            </p>
+          </div>
+
+          {/* Card 5: Analyses / Bets */}
+          <div
+            onClick={() => setActiveTab("matches")}
+            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
+          >
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-bold">Analyses</span>
+              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+            </div>
+            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
+              {activeAnalysesCount}
+            </p>
+          </div>
+
+          {/* Card 6: Pending payments / Partner queue */}
+          <div
+            onClick={() => setActiveTab("partners")}
+            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
+          >
+            <div className="flex items-center justify-between text-gray-500">
+              <span className="text-xs font-bold leading-tight">
+                Pending<br className="sm:hidden" /> payments
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+            </div>
+            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
+              {pendingPaymentsCount}
+            </p>
+          </div>
+        </div>
+
+        {/* ── BOTTOM SEGMENTED NAVIGATION / TABS BAR (Exact Screenshot Pill Design) ── */}
+        <div className="pt-2">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setActiveTab("payments")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "payments"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Payments
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "settings"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Settings
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("packages")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "packages"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Packages & credits
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("partners")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all relative",
+                activeTab === "partners"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Partners
+              {pendingPartners.length > 0 && (
+                <span className="ml-1.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-black inline-flex items-center justify-center">
+                  {pendingPartners.length}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("users")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "users"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Users
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("matches")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "matches"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Matches
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("audit")}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
+                activeTab === "audit"
+                  ? "bg-[#ffe2e5] text-[#e11d48] border border-[#fecdd3] shadow-xs"
+                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80"
+              )}
+            >
+              Audit log
+            </button>
+          </div>
+        </div>
+
+        {/* ── TAB CONTENT PANELS ── */}
+        <div className="space-y-4">
+          {/* TAB 1: PAYMENTS */}
+          {activeTab === "payments" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 pb-3">
                 <div>
-                  <h3 className="text-base font-bold flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-emerald-500" /> Free Sports API Management
+                  <h3 className="text-sm font-black text-gray-900">
+                    Payment Gateway & Platform Revenue Control
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Live match fixtures, real scores, elapsed minute, team logos & sports market odds.
+                  <p className="text-xs text-gray-400">
+                    Review incoming user deposits, developer 30% commission, and revenue ledger.
                   </p>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <Button
-                    onClick={() => fetchApiMatches()}
-                    disabled={isApiLoading}
+                    type="button"
                     variant="outline"
                     size="sm"
-                    className="gap-1.5"
+                    onClick={handleResetStats}
+                    className="h-8 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
                   >
-                    <RotateCw className={cn("w-3.5 h-3.5", isApiLoading && "animate-spin text-primary")} />
-                    {isApiLoading ? "Syncing..." : "Sync API Now"}
+                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                    Reset All to GH₵0
                   </Button>
+
                   <Button
-                    onClick={() => setEnableLiveApi(!enableLiveApi)}
-                    variant={enableLiveApi ? "default" : "secondary"}
+                    type="button"
+                    variant="outline"
                     size="sm"
+                    onClick={handleRestoreScreenshotStats}
+                    className="h-8 text-xs font-bold text-gray-700 border-gray-200 hover:bg-gray-50"
                   >
-                    {enableLiveApi ? "Live API Enabled" : "Live API Disabled"}
+                    Restore Reference Stats
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      simulateDeposit(500);
+                      toast.success("+GH₵500 deposit simulated into Today's Revenue!");
+                    }}
+                    className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    +GH₵500 MoMo Test
                   </Button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-surface-2 border border-border">
-                  <div className="text-muted-foreground">Total API Fixtures</div>
-                  <div className="text-xl font-black text-foreground mt-1">{apiMatches.length}</div>
+              {/* Dev Commission callout */}
+              <div className="rounded-xl p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-purple-900">
+                    Developer 30% Daily Commission
+                  </span>
+                  <p className="text-[11px] text-purple-700">
+                    Calculated automatically from today's incoming platform deposits:
+                  </p>
                 </div>
-                <div className="p-3 rounded-xl bg-surface-2 border border-border">
-                  <div className="text-muted-foreground">Live In-Play</div>
-                  <div className="text-xl font-black text-emerald-500 mt-1">{apiLiveCount}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-surface-2 border border-border">
-                  <div className="text-muted-foreground">Active Sources</div>
-                  <div className="text-xl font-black text-foreground mt-1">{apiSourcesFetched} / {FREE_SPORTS_SOURCES.length}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-surface-2 border border-border">
-                  <div className="text-muted-foreground">Last Sync Time</div>
-                  <div className="text-sm font-bold text-foreground mt-1">{lastApiUpdate || "Not synced yet"}</div>
-                </div>
+                <span className="font-mono text-base font-black text-purple-900">
+                  {formatGHC(devCommission)}
+                </span>
               </div>
 
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Connected Sports Data Feeds</h4>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {FREE_SPORTS_SOURCES.map((source) => (
-                    <div key={source.id} className="flex items-center justify-between p-2.5 rounded-xl border border-border bg-surface-2/50 text-xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: source.color }} />
-                        <span className="font-semibold truncate">{source.leagueName}</span>
+              {/* Transactions log */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Recent Platform Deposits ({transactions.length})
+                </h4>
+
+                {transactions.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                    No deposit transactions yet. Use "+GH₵500 MoMo Test" above to simulate transactions or click days on the Daily Revenue card.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                    {transactions.map((tx) => (
+                      <div key={tx.id} className="p-3 flex items-center justify-between hover:bg-gray-50 text-xs">
+                        <div className="space-y-0.5">
+                          <p className="font-mono font-bold text-gray-900">{tx.reference}</p>
+                          <p className="text-[10px] text-gray-400">{tx.method} • {new Date(tx.createdAt).toLocaleTimeString()}</p>
+                        </div>
+                        <span className="font-mono font-black text-emerald-600">
+                          +{formatGHC(tx.amount)}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
-                        FREE API
-                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PARTNERS */}
+          {activeTab === "partners" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">
+                    Partner Affiliates & Commission Controls
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Manage affiliate partners, approve incoming applications, and adjust commission rates.
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCopyPartnerRegLink}
+                  className="h-8 text-xs font-bold bg-[#cf143a] hover:bg-[#b01030] text-white flex items-center gap-1.5"
+                >
+                  {copiedPartnerRegLink ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copiedPartnerRegLink ? "Copied!" : "Copy Partner Reg Link"}</span>
+                </Button>
+              </div>
+
+              {/* Pending applications */}
+              {pendingPartners.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                    <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wide">
+                      Pending Partner Applications ({pendingPartners.length})
+                    </h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    {pendingPartners.map((partner) => (
+                      <div
+                        key={partner.id}
+                        className="p-4 rounded-xl border border-amber-200 bg-amber-50/50 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-black text-gray-900">{partner.name}</h4>
+                              <span className="font-mono text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                                {partner.code}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {partner.channel} • {partner.audienceSize || "Audience not specified"}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleApprovePartner(partner.id, partner.name)}
+                              className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                            >
+                              <Check className="h-3 w-3 mr-1" /> Approve
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRejectPartner(partner.id, partner.name)}
+                              className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Approved partners */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                  Active Partners ({approvedPartners.length})
+                </h4>
+
+                <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                  {approvedPartners.map((p) => (
+                    <div key={p.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-gray-50">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm text-gray-900">{p.name}</span>
+                          <span className="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                            {p.code}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          Commission Rate: <strong className="text-gray-800">{p.commissionRate}%</strong>
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {editingPartnerId === p.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={editRateInput}
+                              onChange={(e) => setEditRateInput(Number(e.target.value))}
+                              className="w-16 h-7 text-xs"
+                            />
+                            <span className="text-xs font-bold">%</span>
+                            <Button
+                              size="sm"
+                              className="h-7 text-xs bg-emerald-600 text-white"
+                              onClick={() => handleSaveCommission(p.id, p.name)}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              setEditingPartnerId(p.id);
+                              setEditRateInput(p.commissionRate);
+                            }}
+                          >
+                            <Edit3 className="h-3 w-3 mr-1" /> Edit Rate
+                          </Button>
+                        )}
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleCopyUserLink(p.code)}
+                        >
+                          <Share2 className="h-3 w-3 mr-1" /> Copy Link
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
-          </TabsContent>
+          )}
 
-          <TabsContent value="users" className="mt-4 space-y-3">
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search users by name, handle or email" aria-label="Search users" className="h-11" />
-            {filteredUsers.length === 0 ? (
-              <EmptyState title="No users match that search" description="Try a different name or email." />
-            ) : (
-              <div className="surface-card overflow-x-auto rounded-2xl">
-                <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                      <th className="px-4 py-3 font-medium">User</th>
-                      <th className="px-4 py-3 font-medium">Role</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 text-right font-medium">Points</th>
-                      <th className="px-4 py-3 text-right font-medium">Slips</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((u) => (
-                      <tr key={u.id} className="border-b border-border/50 last:border-0">
-                        <td className="px-4 py-3">
-                          <p className="font-medium">{u.name}</p>
-                          <p className="text-xs text-muted-foreground">@{u.username} · {u.email}</p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">{u.role}</Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={cn("text-xs font-semibold", u.status === "ACTIVE" ? "text-success" : "text-destructive")}>{u.status}</span>
-                        </td>
-                        <td className="tabular px-4 py-3 text-right font-semibold">{formatPoints(u.points)}</td>
-                        <td className="tabular px-4 py-3 text-right">{u.slips}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </TabsContent>
+          {/* TAB 3: SETTINGS */}
+          {activeTab === "settings" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4 text-xs">
+              <h3 className="text-sm font-black text-gray-900">
+                Platform & Gateway Configuration
+              </h3>
+              <p className="text-gray-500">
+                Configure payout gateways, mobile money rails, developer revenue share (30%), and risk parameters.
+              </p>
 
-          <TabsContent value="matches" className="mt-4 space-y-2">
-            {allMatches.slice(0, 16).map((m) => (
-              <div key={m.id} className="surface-card grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl p-4">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">
-                    {teamById(m.homeId).name} vs {teamById(m.awayId).name}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {leagueById(m.leagueId).name} · {m.markets.length} markets {m.id.startsWith("api-") ? "· Live API" : ""}
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50 space-y-1">
+                  <span className="font-bold text-gray-800">Developer Cut</span>
+                  <p className="text-gray-500">30% automatic calculation on all platform revenue.</p>
+                  <span className="inline-block mt-2 font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Active (30.0%)
+                  </span>
                 </div>
-                <Badge
-                  className={cn(
-                    "shrink-0 text-[10px] uppercase tracking-wider",
-                    m.status === "LIVE" && "bg-live/20 text-live",
-                    m.status === "FINISHED" && "bg-success/20 text-success",
-                    m.status === "SCHEDULED" && "bg-muted text-muted-foreground",
-                  )}
-                >
-                  {m.status}
-                </Badge>
-              </div>
-            ))}
-          </TabsContent>
 
-          <TabsContent value="partners" className="mt-4 space-y-2">
-            {partners.map((p) => (
-              <div key={p.id} className="surface-card grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl p-4">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{p.name}</p>
-                  <p className="tabular truncate text-xs text-muted-foreground">{p.code} · {p.signups} signups · {p.activeUsers} active</p>
-                </div>
-                <div className="text-right">
-                  <p className="tabular text-sm font-bold text-primary">{formatPoints(p.rewardPoints)} pts</p>
-                  <p className="text-[11px] text-muted-foreground">{p.tier} tier</p>
+                <div className="p-3.5 rounded-xl border border-gray-200 bg-gray-50 space-y-1">
+                  <span className="font-bold text-gray-800">MoMo Rail Status</span>
+                  <p className="text-gray-500">MTN & Telecel direct payment collections.</p>
+                  <span className="inline-block mt-2 font-mono font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Connected (Ghana Cedi GH₵)
+                  </span>
                 </div>
               </div>
-            ))}
-            <p className="px-1 text-[11px] text-muted-foreground">Partner rewards are virtual points only — no monetary commissions are paid.</p>
-          </TabsContent>
-
-          <TabsContent value="audit" className="mt-4">
-            <div className="surface-card rounded-2xl p-2">
-              {auditLog.map((a) => (
-                <div key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border/50 px-3 py-3 last:border-0">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm">{a.action}</p>
-                    <p className="text-xs text-muted-foreground">by {a.actor}</p>
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">{a.at}</span>
-                </div>
-              ))}
             </div>
-          </TabsContent>
-        </Tabs>
-      </div>
+          )}
+
+          {/* TAB 4: PACKAGES */}
+          {activeTab === "packages" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-black text-gray-900">
+                VIP Credit Packages & Access Plans
+              </h3>
+              <p className="text-xs text-gray-400">
+                Manage credit bundles offered to users for premium match insights.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl border border-gray-200 bg-white shadow-2xs space-y-2">
+                  <span className="text-xs font-bold text-gray-500">Starter Pack</span>
+                  <p className="text-xl font-black text-gray-900 font-mono">GH₵20</p>
+                  <p className="text-[11px] text-gray-400">5 VIP analysis credits</p>
+                </div>
+                <div className="p-3.5 rounded-xl border border-red-200 bg-red-50/40 shadow-2xs space-y-2">
+                  <span className="text-xs font-bold text-red-600">Pro Analyst</span>
+                  <p className="text-xl font-black text-gray-900 font-mono">GH₵50</p>
+                  <p className="text-[11px] text-gray-500">15 VIP credits + priority sync</p>
+                </div>
+                <div className="p-3.5 rounded-xl border border-gray-200 bg-white shadow-2xs space-y-2">
+                  <span className="text-xs font-bold text-gray-500">Elite Syndicate</span>
+                  <p className="text-xl font-black text-gray-900 font-mono">GH₵150</p>
+                  <p className="text-[11px] text-gray-400">50 credits + all leagues access</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: USERS */}
+          {activeTab === "users" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-gray-900">
+                    Platform Registered Members ({totalUsersCount})
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Inspect user accounts, active slips, and registration statuses.
+                  </p>
+                </div>
+
+                <div className="w-full sm:w-64">
+                  <Input
+                    placeholder="Search users by name, username..."
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                {filteredUsers.map((u) => (
+                  <div key={u.id} className="p-3 flex items-center justify-between hover:bg-gray-50 text-xs">
+                    <div>
+                      <span className="font-bold text-gray-900">{u.name}</span>
+                      <p className="text-[11px] text-gray-400">{u.email} • Joined {u.joined}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-bold">
+                      {u.role}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: MATCHES */}
+          {activeTab === "matches" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                    <Globe className="h-4 w-4 text-emerald-600" /> Free Sports API Management
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Live match fixtures, real scores, elapsed minute & betting markets.
+                  </p>
+                </div>
+
+                <Button
+                  size="sm"
+                  onClick={() => fetchApiMatches()}
+                  disabled={isApiLoading}
+                  className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", isApiLoading && "animate-spin")} />
+                  {isApiLoading ? "Syncing API..." : "Sync Live Matches"}
+                </Button>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl text-xs flex items-center justify-between">
+                <span className="text-gray-500">
+                  Last API Sync: <strong className="text-gray-800">{lastApiUpdate || "Auto (Live)"}</strong>
+                </span>
+                <span className="text-emerald-700 font-bold">
+                  {apiLiveCount} matches actively in-play
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: AUDIT */}
+          {activeTab === "audit" && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
+              <h3 className="text-sm font-black text-gray-900">
+                Security & Platform Audit Log
+              </h3>
+
+              <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 overflow-hidden">
+                {auditLog.map((log) => (
+                  <div key={log.id} className="p-3 text-xs flex items-center justify-between">
+                    <div>
+                      <span className="font-bold text-gray-800">{log.action}</span>
+                      <p className="text-[10px] text-gray-400">Actor: {log.actor}</p>
+                    </div>
+                    <span className="text-[11px] text-gray-400 font-mono">{log.at}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

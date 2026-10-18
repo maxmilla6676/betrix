@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ChevronLeft,
@@ -6,12 +6,13 @@ import {
   ChevronUp,
   Lock,
   Radio,
-  Plus,
-  ArrowRight,
+  Clock,
+  Calendar,
 } from "lucide-react";
 import { useBetrix, type Selection } from "@/store/betrix";
-import { teamById, leagueById, matches as seedMatches, type Match } from "@/data/football";
+import { teamById, leagueById, dayBucket, type Match } from "@/data/football";
 import { cn } from "@/lib/utils";
+import { formatTimeGhana, formatClockGhana, GHANA_TZ } from "@/lib/ghana-time";
 
 export const Route = createFileRoute("/live")({
   head: () => ({
@@ -24,6 +25,14 @@ export const Route = createFileRoute("/live")({
 });
 
 // Expanded Mock Live Matches across different sports to fulfill Tennis, Football, Basketball, etc.
+// Helper to build a logo URL for well-known teams via ESPN CDN
+function espnLogo(id: string) {
+  return `https://a.espncdn.com/i/teamlogos/soccer/500/${id}.png`;
+}
+function espnLogoNba(id: string) {
+  return `https://a.espncdn.com/i/teamlogos/nba/500/${id}.png`;
+}
+
 const extraLiveSportsMatches = [
   {
     id: "live-tennis-1",
@@ -31,7 +40,11 @@ const extraLiveSportsMatches = [
     leagueName: "ATP Challenger Columbus, USA Men Singles",
     period: "set 2",
     homeName: "Kozlov, Stefan",
+    homeLogo: undefined as string | undefined,
+    homeColor: "#1B4D8F",
     awayName: "Trotter, James Kent",
+    awayLogo: undefined as string | undefined,
+    awayColor: "#2E7D32",
     homeScore: 1,
     awayScore: 0,
     markets: [
@@ -60,7 +73,11 @@ const extraLiveSportsMatches = [
     leagueName: "SRL Fall Invitational Tulsa (OK), USA",
     period: "set 1",
     homeName: "Duckworth, James (Srl)",
+    homeLogo: undefined as string | undefined,
+    homeColor: "#795548",
     awayName: "Sonego, Lorenzo (Srl)",
+    awayLogo: undefined as string | undefined,
+    awayColor: "#009688",
     homeScore: 0,
     awayScore: 0,
     markets: [
@@ -88,7 +105,11 @@ const extraLiveSportsMatches = [
     leagueName: "WTA Tokyo, Japan Women Singles",
     period: "set 3",
     homeName: "Osaka, Naomi",
+    homeLogo: undefined as string | undefined,
+    homeColor: "#D4A017",
     awayName: "Gauff, Coco",
+    awayLogo: undefined as string | undefined,
+    awayColor: "#1565C0",
     homeScore: 1,
     awayScore: 1,
     markets: [
@@ -108,7 +129,11 @@ const extraLiveSportsMatches = [
     leagueName: "NBA Regular Season",
     period: "Q3 04:12",
     homeName: "Los Angeles Lakers",
+    homeLogo: espnLogoNba("lal"),
+    homeColor: "#552583",
     awayName: "Golden State Warriors",
+    awayLogo: espnLogoNba("gsw"),
+    awayColor: "#006BB6",
     homeScore: 84,
     awayScore: 79,
     markets: [
@@ -128,7 +153,11 @@ const extraLiveSportsMatches = [
     leagueName: "EuroLeague Men",
     period: "Q4 01:45",
     homeName: "Real Madrid Baloncesto",
+    homeLogo: espnLogo("86"),
+    homeColor: "#FEBE10",
     awayName: "Fenerbahçe Beko",
+    awayLogo: espnLogo("3974"),
+    awayColor: "#003DA5",
     homeScore: 72,
     awayScore: 75,
     markets: [
@@ -148,7 +177,11 @@ const extraLiveSportsMatches = [
     leagueName: "UEFA Champions League",
     period: "68'",
     homeName: "Real Madrid",
+    homeLogo: espnLogo("86"),
+    homeColor: "#FEBE10",
     awayName: "Manchester City",
+    awayLogo: espnLogo("382"),
+    awayColor: "#6CABDD",
     homeScore: 2,
     awayScore: 1,
     markets: [
@@ -169,7 +202,11 @@ const extraLiveSportsMatches = [
     leagueName: "English Premier League",
     period: "54'",
     homeName: "Arsenal",
+    homeLogo: espnLogo("359"),
+    homeColor: "#EF0107",
     awayName: "Chelsea",
+    awayLogo: espnLogo("363"),
+    awayColor: "#034694",
     homeScore: 1,
     awayScore: 0,
     markets: [
@@ -209,21 +246,37 @@ function LivePage() {
   const [sortBy, setSortBy] = useState<"Leagues" | "Time">("Leagues");
   const [collapseAll, setCollapseAll] = useState(false);
 
-  // Combine real store live matches with extra sports matches
+  // ── Ghana GMT live clock ────────────────────────────────────────────────────
+  const [ghanaClock, setGhanaClock] = useState(() => formatClockGhana(new Date()));
+  useEffect(() => {
+    const t = setInterval(() => setGhanaClock(formatClockGhana(new Date())), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ghanaDateLabel = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", timeZone: GHANA_TZ,
+    });
+  }, []);
+
+  // ── Live matches from store ─────────────────────────────────────────────────
   const storeLive = useMemo(() => {
     return allMatches
       .filter((m) => m.status === "LIVE")
       .map((m) => {
-        const h = teamById(m.homeId)?.name || "Home";
-        const a = teamById(m.awayId)?.name || "Away";
+        const homeTeam = teamById(m.homeId);
+        const awayTeam = teamById(m.awayId);
         const lg = leagueById(m.leagueId)?.name || "Live Tournament";
         return {
           id: m.id,
           sportId: m.sportId || "football",
           leagueName: lg,
           period: `${m.minute || 45}'`,
-          homeName: h,
-          awayName: a,
+          homeName: homeTeam?.name || "Home",
+          homeLogo: homeTeam?.logo,
+          homeColor: homeTeam?.color || "#3B82F6",
+          awayName: awayTeam?.name || "Away",
+          awayLogo: awayTeam?.logo,
+          awayColor: awayTeam?.color || "#EF4444",
           homeScore: m.homeScore ?? 0,
           awayScore: m.awayScore ?? 0,
           markets: m.markets || [
@@ -241,6 +294,20 @@ function LivePage() {
       });
   }, [allMatches]);
 
+  // ── Upcoming: SCHEDULED matches for Today & Tomorrow (Ghana time) ───────────
+  const upcomingToday = useMemo(() =>
+    allMatches.filter((m) => m.status === "SCHEDULED" && dayBucket(m.kickoff) === "Today")
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff)),
+    [allMatches]
+  );
+  const upcomingTomorrow = useMemo(() =>
+    allMatches.filter((m) => m.status === "SCHEDULED" && dayBucket(m.kickoff) === "Tomorrow")
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff)),
+    [allMatches]
+  );
+
+  const [upcomingCollapsed, setUpcomingCollapsed] = useState(false);
+
   const currentSportMatches = useMemo(() => {
     const combined = [...extraLiveSportsMatches, ...storeLive];
     return combined.filter((m) => m.sportId === activeSport);
@@ -253,7 +320,7 @@ function LivePage() {
       if (!groups[m.leagueName]) {
         groups[m.leagueName] = [];
       }
-      groups[m.leagueName].push(m);
+      groups[m.leagueName]!.push(m);
     }
     return groups;
   }, [currentSportMatches]);
@@ -275,13 +342,12 @@ function LivePage() {
     setCollapsedLeagues(newCollapsed);
   };
 
-  // Total live matches count across all sports
-  const totalLiveCount = 76;
+  const totalLiveCount = storeLive.length + extraLiveSportsMatches.length;
 
   return (
     <div className="min-h-screen bg-[#000000] text-white flex flex-col pb-20 select-none">
-      {/* 1. Yellow Live Header Bar */}
-      <div className="bg-[#F5C400] text-black px-4 py-2.5 flex items-center justify-between shadow-md">
+      {/* 1. Yellow Live Header Bar — Ghana GMT clock */}
+      <div className="bg-[#F5C400] text-black px-4 py-2 flex items-center justify-between shadow-md">
         <button
           onClick={() => navigate({ to: "/" })}
           className="flex items-center text-black hover:opacity-75 transition-opacity"
@@ -289,19 +355,27 @@ function LivePage() {
           <ChevronLeft className="w-6 h-6 stroke-[3]" />
         </button>
 
-        <div className="flex items-center space-x-2 font-black text-base tracking-tight">
-          <span className="w-2.5 h-2.5 rounded-full bg-white border-2 border-black inline-block" />
-          <span>Live</span>
-          <span className="font-semibold text-black/80">({totalLiveCount})</span>
+        <div className="flex flex-col items-center">
+          <div className="flex items-center space-x-2 font-black text-base tracking-tight">
+            <span className="w-2.5 h-2.5 rounded-full bg-white border-2 border-black inline-block animate-pulse" />
+            <span>Live</span>
+            <span className="font-semibold text-black/80">({totalLiveCount})</span>
+          </div>
+          {/* Ghana GMT clock */}
+          <div className="flex items-center gap-1 text-[10px] font-bold text-black/70 mt-0.5">
+            <Clock className="w-3 h-3" />
+            <span>{ghanaClock} GMT · {ghanaDateLabel}</span>
+          </div>
         </div>
 
         <button
-          onClick={() => navigate({ to: "/" })}
+          onClick={() => navigate({ to: "/matches" })}
           className="font-black text-xs uppercase text-black hover:underline"
         >
           Schedule
         </button>
       </div>
+
 
       {/* 2. Sport Icons Horizontal Bar */}
       <div className="bg-[#0c0f16] border-b border-[#181d2a] px-2 py-3 overflow-x-auto no-scrollbar">
@@ -470,22 +544,42 @@ function LivePage() {
 
                             {/* Competitor 1 */}
                             <div className="flex items-center justify-between text-xs font-bold text-gray-100">
-                              <span className="truncate max-w-[150px] sm:max-w-[200px]">
-                                {m.homeName}
-                              </span>
-                              <span className="font-mono font-black text-white pl-2">
-                                {m.homeScore}
-                              </span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                {(m as any).homeLogo ? (
+                                  <span className="inline-flex shrink-0 h-6 w-6 rounded-full border border-white/20 bg-white p-0.5 overflow-hidden shadow-sm">
+                                    <img src={(m as any).homeLogo} alt={m.homeName} className="h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="inline-flex shrink-0 h-6 w-6 rounded-full items-center justify-center text-[9px] font-black text-white border border-white/10"
+                                    style={{ backgroundColor: (m as any).homeColor || "#3B82F6" }}
+                                  >
+                                    {m.homeName.substring(0, 2).toUpperCase()}
+                                  </span>
+                                )}
+                                <span className="truncate max-w-[120px] sm:max-w-[170px]">{m.homeName}</span>
+                              </div>
+                              <span className="font-mono font-black text-white pl-2 shrink-0">{m.homeScore}</span>
                             </div>
 
                             {/* Competitor 2 */}
                             <div className="flex items-center justify-between text-xs font-bold text-gray-100">
-                              <span className="truncate max-w-[150px] sm:max-w-[200px]">
-                                {m.awayName}
-                              </span>
-                              <span className="font-mono font-black text-white pl-2">
-                                {m.awayScore}
-                              </span>
+                              <div className="flex items-center gap-2 min-w-0">
+                                {(m as any).awayLogo ? (
+                                  <span className="inline-flex shrink-0 h-6 w-6 rounded-full border border-white/20 bg-white p-0.5 overflow-hidden shadow-sm">
+                                    <img src={(m as any).awayLogo} alt={m.awayName} className="h-full w-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="inline-flex shrink-0 h-6 w-6 rounded-full items-center justify-center text-[9px] font-black text-white border border-white/10"
+                                    style={{ backgroundColor: (m as any).awayColor || "#EF4444" }}
+                                  >
+                                    {m.awayName.substring(0, 2).toUpperCase()}
+                                  </span>
+                                )}
+                                <span className="truncate max-w-[120px] sm:max-w-[170px]">{m.awayName}</span>
+                              </div>
+                              <span className="font-mono font-black text-white pl-2 shrink-0">{m.awayScore}</span>
                             </div>
 
                             {/* +2 markets link */}
@@ -554,6 +648,150 @@ function LivePage() {
               </div>
             );
           })
+        )}
+      </div>
+
+      {/* ── UPCOMING MATCHES SECTION ───────────────────────────────────────── */}
+      <div className="border-t border-[#181d26]">
+        {/* Section Header */}
+        <button
+          onClick={() => setUpcomingCollapsed(!upcomingCollapsed)}
+          className="w-full bg-[#0a0e17] hover:bg-[#10141f] px-4 py-3 flex items-center justify-between border-b border-[#141926] transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-[#F5C400]" />
+            <span className="font-extrabold text-sm text-white tracking-wide">UPCOMING MATCHES</span>
+            <span className="text-xs font-bold text-gray-400 ml-1">
+              ({upcomingToday.length + upcomingTomorrow.length})
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-[#F5C400] font-mono">{ghanaClock} GMT</span>
+            {upcomingCollapsed
+              ? <ChevronDown className="w-4 h-4 text-[#F5C400]" />
+              : <ChevronUp className="w-4 h-4 text-[#F5C400]" />
+            }
+          </div>
+        </button>
+
+        {!upcomingCollapsed && (
+          <div className="divide-y divide-[#0f1420]">
+            {/* ── TODAY ── */}
+            {upcomingToday.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between px-4 py-2 bg-[#05080f]">
+                  <span className="text-[11px] font-black text-[#F5C400] uppercase tracking-wider">TODAY</span>
+                  <span className="text-[10px] font-bold text-gray-500">{upcomingToday.length} fixtures</span>
+                </div>
+                <div className="divide-y divide-[#0d1220]">
+                  {upcomingToday.map((m) => {
+                    const home = teamById(m.homeId);
+                    const away = teamById(m.awayId);
+                    const league = leagueById(m.leagueId);
+                    const kickoffStr = formatTimeGhana(m.kickoff);
+                    const market = m.markets.find((mk) => mk.id === "1x2") || m.markets[0];
+                    const opts = market?.options || [];
+                    return (
+                      <div key={m.id} className="px-4 py-3 bg-[#000000] hover:bg-[#07090e] transition-colors flex items-center justify-between gap-3">
+                        <Link to="/match/$matchId" params={{ matchId: m.id }} className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-semibold">
+                            <Clock className="w-3 h-3 text-[#F5C400]" />
+                            <span className="font-extrabold text-[#F5C400]">{kickoffStr}</span>
+                            <span className="truncate">{league?.name}</span>
+                          </div>
+                          <div className="text-xs font-bold text-gray-200 truncate">{home?.name}</div>
+                          <div className="text-xs font-bold text-gray-200 truncate">{away?.name}</div>
+                        </Link>
+                        <div className="grid grid-cols-3 gap-1 w-40 shrink-0">
+                          {[0, 1, 2].map((i) => {
+                            const opt = opts[i];
+                            if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
+                            const active = isSelected(m.id, market?.id || "1x2", opt.id);
+                            return (
+                              <button
+                                key={opt.id}
+                                onClick={() => toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier })}
+                                className={cn(
+                                  "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
+                                  active
+                                    ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
+                                    : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
+                                )}
+                              >
+                                <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
+                                <span>{opt.multiplier.toFixed(2)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── TOMORROW ── */}
+            {upcomingTomorrow.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between px-4 py-2 bg-[#05080f]">
+                  <span className="text-[11px] font-black text-gray-300 uppercase tracking-wider">TOMORROW</span>
+                  <span className="text-[10px] font-bold text-gray-500">{upcomingTomorrow.length} fixtures</span>
+                </div>
+                <div className="divide-y divide-[#0d1220]">
+                  {upcomingTomorrow.map((m) => {
+                    const home = teamById(m.homeId);
+                    const away = teamById(m.awayId);
+                    const league = leagueById(m.leagueId);
+                    const kickoffStr = formatTimeGhana(m.kickoff);
+                    const market = m.markets.find((mk) => mk.id === "1x2") || m.markets[0];
+                    const opts = market?.options || [];
+                    return (
+                      <div key={m.id} className="px-4 py-3 bg-[#000000] hover:bg-[#07090e] transition-colors flex items-center justify-between gap-3">
+                        <Link to="/match/$matchId" params={{ matchId: m.id }} className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2 text-[10px] text-gray-500 font-semibold">
+                            <Clock className="w-3 h-3 text-gray-400" />
+                            <span className="font-extrabold text-gray-300">{kickoffStr}</span>
+                            <span className="truncate">{league?.name}</span>
+                          </div>
+                          <div className="text-xs font-bold text-gray-200 truncate">{home?.name}</div>
+                          <div className="text-xs font-bold text-gray-200 truncate">{away?.name}</div>
+                        </Link>
+                        <div className="grid grid-cols-3 gap-1 w-40 shrink-0">
+                          {[0, 1, 2].map((i) => {
+                            const opt = opts[i];
+                            if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
+                            const active = isSelected(m.id, market?.id || "1x2", opt.id);
+                            return (
+                              <button
+                                key={opt.id}
+                                onClick={() => toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier })}
+                                className={cn(
+                                  "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
+                                  active
+                                    ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
+                                    : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
+                                )}
+                              >
+                                <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
+                                <span>{opt.multiplier.toFixed(2)}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {upcomingToday.length === 0 && upcomingTomorrow.length === 0 && (
+              <div className="p-10 text-center text-gray-600 text-xs font-bold">
+                No upcoming fixtures found for today or tomorrow.
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

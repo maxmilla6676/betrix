@@ -22,8 +22,8 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { login } = useBetrix();
-  const search = useSearch({ strict: false }) as { mode?: string; redirect?: string };
-  const defaultTab = search?.mode === "signup" ? "signup" : "signin";
+  const search = useSearch({ strict: false }) as { mode?: string; redirect?: string; ref?: string };
+  const defaultTab = search?.mode === "signup" || search?.ref ? "signup" : "signin";
 
   const [tab, setTab] = useState<"signin" | "signup">(defaultTab);
   const [loading, setLoading] = useState<null | "signin" | "signup">(null);
@@ -34,6 +34,7 @@ function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [referralCode, setReferralCode] = useState(search?.ref || "");
 
   const handleSubmit = (mode: "signin" | "signup") => (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,8 +47,14 @@ function AuthPage() {
     setLoading(mode);
     setTimeout(() => {
       setLoading(null);
-      login(phone.trim() || "0205795789");
-      toast.success(mode === "signin" ? "Welcome back to BETRIX!" : "Account created successfully!");
+      login(phone.trim() || "0205795789", mode === "signup" ? (referralCode.trim() || undefined) : undefined);
+      toast.success(
+        mode === "signin"
+          ? "Welcome back to BETRIX!"
+          : referralCode.trim()
+            ? `Account created! Partner referral ${referralCode.trim().toUpperCase()} applied.`
+            : "Account created successfully!"
+      );
       void navigate({ to: search?.redirect || "/profile" });
     }, 600);
   };
@@ -251,6 +258,34 @@ function AuthPage() {
                       {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
+                </div>
+
+                {/* Partner Referral Code (Auto-populated from Partner's Unique Registration Link) */}
+                <div className="space-y-1.5 pt-0.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                      <span>Partner Referral Code (Optional)</span>
+                    </label>
+                    {referralCode.trim() && (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                        ✓ Partner Code Applied
+                      </span>
+                    )}
+                  </div>
+                  <div className="relative flex rounded-xl border border-[#2c2c3b] bg-[#1c1c24] overflow-hidden focus-within:border-[#F5C400] transition-all">
+                    <Input
+                      type="text"
+                      placeholder="e.g. BTX-AMA"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                      className="border-0 bg-transparent h-11 text-sm font-mono font-bold text-white placeholder-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-3 uppercase"
+                    />
+                  </div>
+                  {referralCode.trim() && (
+                    <p className="text-[11px] text-[#F5C400] font-medium">
+                      You are registering through an official BETRIX Partner referral link ({referralCode.trim().toUpperCase()}).
+                    </p>
+                  )}
                 </div>
 
                 {/* Terms checkbox */}

@@ -18,6 +18,7 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as MatchesRouteImport } from './routes/matches'
 import { Route as NotificationsRouteImport } from './routes/notifications'
+import { Route as PartnerRegisterRouteImport } from './routes/partner-register'
 import { Route as PartnersRouteImport } from './routes/partners'
 import { Route as PointsRouteImport } from './routes/points'
 import { Route as PredictionsRouteImport } from './routes/predictions'
@@ -72,6 +73,11 @@ const NotificationsRoute = NotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PartnerRegisterRoute = PartnerRegisterRouteImport.update({
+  id: '/partner-register',
+  path: '/partner-register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PartnersRoute = PartnersRouteImport.update({
   id: '/partners',
   path: '/partners',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/matches': typeof MatchesRoute
   '/notifications': typeof NotificationsRoute
+  '/partner-register': typeof PartnerRegisterRoute
   '/partners': typeof PartnersRoute
   '/points': typeof PointsRoute
   '/predictions': typeof PredictionsRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/matches': typeof MatchesRoute
   '/notifications': typeof NotificationsRoute
+  '/partner-register': typeof PartnerRegisterRoute
   '/partners': typeof PartnersRoute
   '/points': typeof PointsRoute
   '/predictions': typeof PredictionsRoute
@@ -162,6 +170,7 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/matches': typeof MatchesRoute
   '/notifications': typeof NotificationsRoute
+  '/partner-register': typeof PartnerRegisterRoute
   '/partners': typeof PartnersRoute
   '/points': typeof PointsRoute
   '/predictions': typeof PredictionsRoute
@@ -183,6 +192,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/matches'
     | '/notifications'
+    | '/partner-register'
     | '/partners'
     | '/points'
     | '/predictions'
@@ -202,6 +212,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/matches'
     | '/notifications'
+    | '/partner-register'
     | '/partners'
     | '/points'
     | '/predictions'
@@ -221,6 +232,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/matches'
     | '/notifications'
+    | '/partner-register'
     | '/partners'
     | '/points'
     | '/predictions'
@@ -241,6 +253,7 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   MatchesRoute: typeof MatchesRoute
   NotificationsRoute: typeof NotificationsRoute
+  PartnerRegisterRoute: typeof PartnerRegisterRoute
   PartnersRoute: typeof PartnersRoute
   PointsRoute: typeof PointsRoute
   PredictionsRoute: typeof PredictionsRoute
@@ -316,6 +329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/partner-register': {
+      id: '/partner-register'
+      path: '/partner-register'
+      fullPath: '/partner-register'
+      preLoaderRoute: typeof PartnerRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/partners': {
       id: '/partners'
       path: '/partners'
@@ -385,6 +405,7 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   MatchesRoute: MatchesRoute,
   NotificationsRoute: NotificationsRoute,
+  PartnerRegisterRoute: PartnerRegisterRoute,
   PartnersRoute: PartnersRoute,
   PointsRoute: PointsRoute,
   PredictionsRoute: PredictionsRoute,

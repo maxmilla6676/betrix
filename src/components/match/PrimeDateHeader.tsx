@@ -1,44 +1,12 @@
 import { useState } from "react";
 import { Radio, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { generateGhanaDateOptions, type GhanaDateOption } from "@/lib/ghana-time";
 
-export interface DateOption {
-  id: string;
-  label: string; // e.g. "Tuesday, 09/29" or "29/09 Tue"
-  shortLabel: string; // e.g. "29/09 Tue"
-  dayName: string; // e.g. "TODAY" or "TOMORROW" or "WEDNESDAY"
-  dateFormatted: string; // e.g. "Tuesday, 09/29"
-  isoDate: string; // e.g. "2026-09-29"
-  espnParam: string; // e.g. "20260929"
-}
+// Re-export as DateOption for backward compatibility
+export type DateOption = GhanaDateOption;
 
-export function generateDateOptions(): DateOption[] {
-  const options: DateOption[] = [];
-  const base = new Date();
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(base.getTime() + i * 86400000);
-    const dayNameStr = i === 0 ? "TODAY" : i === 1 ? "TOMORROW" : d.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
-    const dateFormatted = d.toLocaleDateString("en-US", { weekday: "long", month: "2-digit", day: "2-digit" });
-    const shortLabel = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleDateString("en-US", { weekday: "short" });
-    
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-
-    options.push({
-      id: `${year}-${month}-${day}`,
-      label: dateFormatted,
-      shortLabel,
-      dayName: dayNameStr,
-      dateFormatted,
-      isoDate: `${year}-${month}-${day}`,
-      espnParam: `${year}${month}${day}`,
-    });
-  }
-
-  return options;
-}
+export { generateGhanaDateOptions as generateDateOptions };
 
 export function PrimeDateHeader({
   selectedDate,
@@ -51,7 +19,7 @@ export function PrimeDateHeader({
   matchCount: number;
   liveCount: number;
 }) {
-  const dateOptions = generateDateOptions();
+  const dateOptions = generateGhanaDateOptions();
 
   return (
     <div className="bg-[#121212] border-b border-[#242424] text-white">
@@ -71,7 +39,7 @@ export function PrimeDateHeader({
 
       {/* Date Tabs Carousel / Strip */}
       <div className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto no-scrollbar bg-[#121212]">
-        {dateOptions.map((opt) => {
+        {dateOptions.map((opt: GhanaDateOption) => {
           const isSelected = opt.id === selectedDate.id;
           return (
             <button

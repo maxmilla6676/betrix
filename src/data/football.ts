@@ -1,5 +1,6 @@
 export type MatchStatus = "SCHEDULED" | "LIVE" | "FINISHED" | "POSTPONED" | "CANCELLED";
 import { dynamicTeams, dynamicLeagues, dynamicMatchesMap } from "@/services/sportsApi";
+import { todayMidnightGhana, GHANA_TZ } from "@/lib/ghana-time";
 
 export interface Sport {
   id: string;
@@ -280,9 +281,8 @@ export const marketTabs = [
 ] as const;
 
 const DAY = 86400000;
-/** Fixed base date so demo data is deterministic across server and client renders. */
-const base = new Date();
-base.setHours(0, 0, 0, 0);
+/** Base date anchored to Ghana midnight (UTC+0) so demo data is timezone-correct. */
+const base = todayMidnightGhana();
 
 type Pair = [string, string, string, number, MatchStatus, string];
 
@@ -323,11 +323,37 @@ const pairs: Pair[] = [
 ];
 
 export const matches: Match[] = pairs.map(([homeId, awayId, leagueId, day, status, venue], i) => {
-  const kickoff = new Date(base.getTime() + day * DAY + (12 + (i % 9)) * 3600000);
+  const now = Date.now();
   const live = status === "LIVE";
   const finished = status === "FINISHED";
   const league = leagues.find((l) => l.id === leagueId)!;
   const sport = sports.find((s) => s.id === league.sportId)!;
+
+  // For LIVE matches: kickoff = right now minus the match minute so it's always in the past
+  // For SCHEDULED/FINISHED: spread across the day using hour offsets
+  let kickoff: Date;
+  if (live) {
+    const minute = 20 + ((i * 17) % 65);
+    // Kickoff was "minute" minutes ago
+    kickoff = new Date(now - minute * 60000);
+  } else if (finished) {
+    // Finished matches: yesterday or 2 days ago
+    kickoff = new Date(base.getTime() + day * DAY + (14 + (i % 6)) * 3600000);
+  } else {
+    // SCHEDULED: spread future kickoffs across the day in 30-min slots
+    // Start from 1 hour from now and spread out
+    const slotMinutes = 60 + i * 30; // 1h, 1h30, 2h, 2h30… from midnight base
+    kickoff = new Date(base.getTime() + day * DAY + slotMinutes * 60000 + (i % 4) * 900000);
+    // If the computed kickoff is in the past for a same-day match, push to future
+    if (day === 0 && kickoff.getTime() <= now) {
+      kickoff = new Date(now + (30 + i * 15) * 60000); // push 30–3.5h into future
+    }
+  }
+
+  // Safety guard: if a match is marked LIVE but kickoff is still in the future, downgrade to SCHEDULED
+  const resolvedStatus: MatchStatus = (live && kickoff.getTime() > now) ? "SCHEDULED" : status;
+  const resolvedLive = resolvedStatus === "LIVE";
+
   return {
     id: `m${i + 1}`,
     leagueId,
@@ -335,15 +361,16 @@ export const matches: Match[] = pairs.map(([homeId, awayId, leagueId, day, statu
     homeId,
     awayId,
     kickoff: kickoff.toISOString(),
-    status,
-    minute: live ? 20 + ((i * 17) % 65) : undefined,
-    homeScore: live || finished ? (i * 3) % 4 : undefined,
-    awayScore: live || finished ? (i * 5) % 3 : undefined,
+    status: resolvedStatus,
+    minute: resolvedLive ? (20 + ((i * 17) % 65)) : undefined,
+    homeScore: resolvedLive || finished ? (i * 3) % 4 : undefined,
+    awayScore: resolvedLive || finished ? (i * 5) % 3 : undefined,
     venue,
     hot: i % 3 === 0,
     markets: markets(i + 1, sport.draw),
   };
 });
+
 
 export const matchById = (id: string) => matches.find((m) => m.id === id) || dynamicMatchesMap.get(id);
 export const liveMatches = () => matches.filter((m) => m.status === "LIVE");
@@ -378,14 +405,17 @@ export function standingsFor(leagueId: string) {
 
 export function dayBucket(iso: string): "Today" | "Tomorrow" | "Upcoming" {
   const d = new Date(iso);
-  const diff = Math.floor((d.getTime() - base.getTime()) / DAY);
+  // Compare against Ghana midnight (UTC+0) so bucketing is correct for Ghana users
+  const ghMidnight = todayMidnightGhana();
+  const diff = Math.floor((d.getTime() - ghMidnight.getTime()) / DAY);
   if (diff <= 0) return "Today";
   if (diff === 1) return "Tomorrow";
   return "Upcoming";
 }
 
 export function formatKickoff(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // Always display in Ghana GMT (Africa/Accra = UTC+0)
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: GHANA_TZ });
 }
 
 export function formatDate(iso: string) {
