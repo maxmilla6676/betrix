@@ -183,11 +183,30 @@ function generateMatchMarkets(home: Team, away: Team, seed: number): MarketItem[
       category: "Main",
       info: "Predict the exact final score of the match.",
       options: [
-        { id: "cs-1:0", label: "1:0", multiplier: 9.00 },
-        { id: "cs-0:0", label: "0:0", multiplier: 1.07 },
-        { id: "cs-0:1", label: "0:1", multiplier: 2.90 },
+        // Home wins
+        { id: "cs-1:0", label: "1:0", multiplier: Number((6.50 + (seed % 80) / 100).toFixed(2)) },
+        { id: "cs-2:0", label: "2:0", multiplier: Number((8.50 + (seed % 120) / 100).toFixed(2)) },
+        { id: "cs-2:1", label: "2:1", multiplier: Number((9.00 + (seed % 150) / 100).toFixed(2)) },
+        { id: "cs-3:0", label: "3:0", multiplier: Number((15.00 + (seed % 200) / 100).toFixed(2)) },
+        { id: "cs-3:1", label: "3:1", multiplier: Number((19.00 + (seed % 250) / 100).toFixed(2)) },
+        { id: "cs-3:2", label: "3:2", multiplier: Number((34.00 + (seed % 400) / 100).toFixed(2)) },
+        { id: "cs-4:0", label: "4:0", multiplier: Number((41.00 + (seed % 500) / 100).toFixed(2)) },
+        { id: "cs-4:1", label: "4:1", multiplier: Number((55.00 + (seed % 600) / 100).toFixed(2)) },
+        // Draws
+        { id: "cs-0:0", label: "0:0", multiplier: Number((7.00 + (seed % 90) / 100).toFixed(2)) },
+        { id: "cs-1:1", label: "1:1", multiplier: Number((6.50 + (seed % 80) / 100).toFixed(2)) },
+        { id: "cs-2:2", label: "2:2", multiplier: Number((18.00 + (seed % 220) / 100).toFixed(2)) },
+        { id: "cs-3:3", label: "3:3", multiplier: Number((67.00 + (seed % 700) / 100).toFixed(2)) },
+        // Away wins
+        { id: "cs-0:1", label: "0:1", multiplier: Number((8.00 + (seed % 100) / 100).toFixed(2)) },
+        { id: "cs-0:2", label: "0:2", multiplier: Number((11.00 + (seed % 160) / 100).toFixed(2)) },
+        { id: "cs-1:2", label: "1:2", multiplier: Number((12.00 + (seed % 170) / 100).toFixed(2)) },
+        { id: "cs-0:3", label: "0:3", multiplier: Number((21.00 + (seed % 280) / 100).toFixed(2)) },
+        { id: "cs-1:3", label: "1:3", multiplier: Number((26.00 + (seed % 320) / 100).toFixed(2)) },
+        { id: "cs-0:4", label: "0:4", multiplier: Number((51.00 + (seed % 550) / 100).toFixed(2)) },
       ],
     },
+
     {
       id: "m_btts",
       name: "Both Teams To Score (BTTS)",
