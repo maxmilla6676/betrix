@@ -33,205 +33,13 @@ function espnLogoNba(id: string) {
   return `https://a.espncdn.com/i/teamlogos/nba/500/${id}.png`;
 }
 
-const extraLiveSportsMatches = [
-  {
-    id: "live-tennis-1",
-    sportId: "tennis",
-    leagueName: "ATP Challenger Columbus, USA Men Singles",
-    period: "set 2",
-    homeName: "Kozlov, Stefan",
-    homeLogo: undefined as string | undefined,
-    homeColor: "#1B4D8F",
-    awayName: "Trotter, James Kent",
-    awayLogo: undefined as string | undefined,
-    awayColor: "#2E7D32",
-    homeScore: 1,
-    awayScore: 0,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-t1-1", label: "1", multiplier: 0, locked: true },
-          { id: "opt-t1-[#]", label: "X", multiplier: 12.00, locked: false },
-          { id: "opt-t1-2", label: "2", multiplier: 0, locked: true },
-        ],
-      },
-      {
-        id: "over_under",
-        name: "Over/Under",
-        options: [
-          { id: "opt-t1-o", label: "Over 21.5", multiplier: 1.85, locked: false },
-          { id: "opt-t1-u", label: "Under 21.5", multiplier: 1.95, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-tennis-2",
-    sportId: "tennis",
-    leagueName: "SRL Fall Invitational Tulsa (OK), USA",
-    period: "set 1",
-    homeName: "Duckworth, James (Srl)",
-    homeLogo: undefined as string | undefined,
-    homeColor: "#795548",
-    awayName: "Sonego, Lorenzo (Srl)",
-    awayLogo: undefined as string | undefined,
-    awayColor: "#009688",
-    homeScore: 0,
-    awayScore: 0,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-t2-1", label: "1", multiplier: 2.15, locked: false },
-          { id: "opt-t2-2", label: "2", multiplier: 1.70, locked: false },
-        ],
-      },
-      {
-        id: "over_under",
-        name: "Over/Under",
-        options: [
-          { id: "opt-t2-o", label: "Over 22.5", multiplier: 1.90, locked: false },
-          { id: "opt-t2-u", label: "Under 22.5", multiplier: 1.90, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-tennis-3",
-    sportId: "tennis",
-    leagueName: "WTA Tokyo, Japan Women Singles",
-    period: "set 3",
-    homeName: "Osaka, Naomi",
-    homeLogo: undefined as string | undefined,
-    homeColor: "#D4A017",
-    awayName: "Gauff, Coco",
-    awayLogo: undefined as string | undefined,
-    awayColor: "#1565C0",
-    homeScore: 1,
-    awayScore: 1,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-t3-1", label: "1", multiplier: 1.95, locked: false },
-          { id: "opt-t3-2", label: "2", multiplier: 1.85, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-bb-1",
-    sportId: "basketball",
-    leagueName: "NBA Regular Season",
-    period: "Q3 04:12",
-    homeName: "Los Angeles Lakers",
-    homeLogo: espnLogoNba("lal"),
-    homeColor: "#552583",
-    awayName: "Golden State Warriors",
-    awayLogo: espnLogoNba("gsw"),
-    awayColor: "#006BB6",
-    homeScore: 84,
-    awayScore: 79,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-b1-1", label: "1", multiplier: 1.45, locked: false },
-          { id: "opt-b1-2", label: "2", multiplier: 2.75, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-bb-2",
-    sportId: "basketball",
-    leagueName: "EuroLeague Men",
-    period: "Q4 01:45",
-    homeName: "Real Madrid Baloncesto",
-    homeLogo: espnLogo("86"),
-    homeColor: "#FEBE10",
-    awayName: "Fenerbahçe Beko",
-    awayLogo: espnLogo("3974"),
-    awayColor: "#003DA5",
-    homeScore: 72,
-    awayScore: 75,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-b2-1", label: "1", multiplier: 3.20, locked: false },
-          { id: "opt-b2-2", label: "2", multiplier: 1.32, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-fb-1",
-    sportId: "football",
-    leagueName: "UEFA Champions League",
-    period: "68'",
-    homeName: "Real Madrid",
-    homeLogo: espnLogo("86"),
-    homeColor: "#FEBE10",
-    awayName: "Manchester City",
-    awayLogo: espnLogo("382"),
-    awayColor: "#6CABDD",
-    homeScore: 2,
-    awayScore: 1,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-f1-1", label: "1", multiplier: 1.55, locked: false },
-          { id: "opt-f1-x", label: "X", multiplier: 3.80, locked: false },
-          { id: "opt-f1-2", label: "2", multiplier: 5.50, locked: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "live-fb-2",
-    sportId: "football",
-    leagueName: "English Premier League",
-    period: "54'",
-    homeName: "Arsenal",
-    homeLogo: espnLogo("359"),
-    homeColor: "#EF0107",
-    awayName: "Chelsea",
-    awayLogo: espnLogo("363"),
-    awayColor: "#034694",
-    homeScore: 1,
-    awayScore: 0,
-    markets: [
-      {
-        id: "1x2",
-        name: "1X2",
-        options: [
-          { id: "opt-f2-1", label: "1", multiplier: 1.40, locked: false },
-          { id: "opt-f2-x", label: "X", multiplier: 4.20, locked: false },
-          { id: "opt-f2-2", label: "2", multiplier: 7.00, locked: false },
-        ],
-      },
-    ],
-  },
-];
+const extraLiveSportsMatches: any[] = [];
 
 const sportsList = [
-  { id: "football", name: "Football", count: 11, emoji: "⚽" },
-  { id: "basketball", name: "Basketball", count: 8, emoji: "🏀" },
-  { id: "tennis", name: "Tennis", count: 21, emoji: "🎾" },
-  { id: "baseball", name: "Baseball", count: 1, emoji: "⚾" },
-  { id: "mma", name: "MMA", count: 3, emoji: "🥊" },
-  { id: "esports", name: "eSports", count: 4, emoji: "🎮" },
-  { id: "icehockey", name: "Ice Hockey", count: 6, emoji: "🏒" },
-  { id: "volleyball", name: "Volleyball", count: 2, emoji: "🏐" },
+  { id: "football", name: "Football", count: 0, emoji: "⚽" },
+  { id: "basketball", name: "Basketball", count: 0, emoji: "🏀" },
+  { id: "tennis", name: "Tennis", count: 0, emoji: "🎾" },
+  { id: "baseball", name: "Baseball", count: 0, emoji: "⚾" },
 ];
 
 const marketTypes = ["1X2", "Over/Under", "BTTS", "Double Chance"];
@@ -240,7 +48,7 @@ function LivePage() {
   const navigate = useNavigate();
   const { isSelected, toggleSelection, allMatches } = useBetrix();
 
-  const [activeSport, setActiveSport] = useState("tennis");
+  const [activeSport, setActiveSport] = useState("football");
   const [activeMarket, setActiveMarket] = useState("1X2");
   const [collapsedLeagues, setCollapsedLeagues] = useState<Record<string, boolean>>({});
   const [sortBy, setSortBy] = useState<"Leagues" | "Time">("Leagues");

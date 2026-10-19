@@ -153,8 +153,8 @@ export const teams: Team[] = [
 ];
 
 export const teamById = (id: string): Team =>
-  teams.find((x) => x.id === id) ||
-  dynamicTeams.get(id) || {
+  dynamicTeams.get(id) ||
+  teams.find((x) => x.id === id) || {
     id,
     name: id.includes("team") ? "Sports Team" : id,
     short: "TM",
@@ -165,8 +165,8 @@ export const teamById = (id: string): Team =>
   };
 
 export const leagueById = (id: string): League =>
-  leagues.find((x) => x.id === id) ||
-  dynamicLeagues.get(id) || {
+  dynamicLeagues.get(id) ||
+  leagues.find((x) => x.id === id) || {
     id,
     slug: "global-league",
     name: "Live League",
@@ -372,7 +372,7 @@ export const matches: Match[] = pairs.map(([homeId, awayId, leagueId, day, statu
 });
 
 
-export const matchById = (id: string) => matches.find((m) => m.id === id) || dynamicMatchesMap.get(id);
+export const matchById = (id: string) => dynamicMatchesMap.get(id) || matches.find((m) => m.id === id);
 export const liveMatches = () => matches.filter((m) => m.status === "LIVE");
 export const upcomingMatches = () =>
   matches

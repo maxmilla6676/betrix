@@ -248,62 +248,7 @@ function HomePage() {
 
   // All Live Matches
   const liveMatches = useMemo(() => {
-    const list = allMatches.filter((m) => m.status === "LIVE");
-    // Ensure we have at least 8 live matches in total for demonstration
-    if (list.length < 8) {
-      const extra: Match[] = [
-        {
-          id: "m_live_1",
-          code: "#74821",
-          leagueId: "l2",
-          sportId: "football",
-          homeId: "t3",
-          awayId: "t4",
-          kickoff: new Date().toISOString(),
-          status: "LIVE",
-          minute: 38,
-          homeScore: 0,
-          awayScore: 0,
-          venue: "Camp Nou",
-          hot: true,
-          markets: [],
-        },
-        {
-          id: "m_live_2",
-          code: "#68812",
-          leagueId: "l3",
-          sportId: "football",
-          homeId: "t5",
-          awayId: "t6",
-          kickoff: new Date().toISOString(),
-          status: "LIVE",
-          minute: 54,
-          homeScore: 2,
-          awayScore: 0,
-          venue: "San Siro",
-          hot: true,
-          markets: [],
-        },
-        {
-          id: "m_live_3",
-          code: "#11111",
-          leagueId: "l4",
-          sportId: "football",
-          homeId: "t7",
-          awayId: "t8",
-          kickoff: new Date().toISOString(),
-          status: "LIVE",
-          minute: 12,
-          homeScore: 0,
-          awayScore: 1,
-          venue: "Allianz Arena",
-          hot: true,
-          markets: [],
-        },
-      ];
-      return [...list, ...extra];
-    }
-    return list;
+    return allMatches.filter((m) => m.status === "LIVE");
   }, [allMatches]);
 
   // Show only 5 live matches unless expanded
@@ -635,9 +580,15 @@ function HomePage() {
           </div>
 
           {/* Fixture Rows for TODAY */}
-          {groupedFixtures.TODAY.map((m) => (
-            <FixtureRow key={m.id} match={m} selectedMarket={activeMarket} />
-          ))}
+          {groupedFixtures.TODAY.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-500 bg-[#121217]">
+              No matches scheduled for today from live feeds.
+            </div>
+          ) : (
+            groupedFixtures.TODAY.map((m) => (
+              <FixtureRow key={m.id} match={m} selectedMarket={activeMarket} />
+            ))
+          )}
         </div>
 
         {/* Bucket 2: TOMORROW */}
@@ -645,7 +596,7 @@ function HomePage() {
           <div className="flex items-center justify-between px-3 py-2 bg-[#121217] text-xs font-black text-[#F5C400]">
             <span>TOMORROW</span>
             <span className="text-gray-400 text-[11px]">
-              {groupedFixtures.TOMORROW.length || 12}
+              {groupedFixtures.TOMORROW.length}
             </span>
           </div>
 
@@ -662,12 +613,15 @@ function HomePage() {
           </div>
 
           {/* Fixture Rows for TOMORROW */}
-          {(groupedFixtures.TOMORROW.length > 0
-            ? groupedFixtures.TOMORROW
-            : groupedFixtures.TODAY
-          ).map((m) => (
-            <FixtureRow key={`tomorrow_${m.id}`} match={m} selectedMarket={activeMarket} />
-          ))}
+          {groupedFixtures.TOMORROW.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-500 bg-[#121217]">
+              No matches scheduled for tomorrow from live feeds.
+            </div>
+          ) : (
+            groupedFixtures.TOMORROW.map((m) => (
+              <FixtureRow key={`tomorrow_${m.id}`} match={m} selectedMarket={activeMarket} />
+            ))
+          )}
         </div>
       </div>
     </div>

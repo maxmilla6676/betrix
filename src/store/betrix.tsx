@@ -1025,15 +1025,9 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       convertAdminMatchToMatch(am, adminLeagues)
     );
     const adminIds = new Set(convertedAdmin.map((m) => m.id));
-
-    if (!enableLiveApi || apiMatches.length === 0) {
-      const uniqueSeed = seedMatches.filter((m) => !adminIds.has(m.id));
-      return [...convertedAdmin, ...uniqueSeed];
-    }
     const nonAdminApi = apiMatches.filter((m) => !adminIds.has(m.id));
-    const apiAndAdminIds = new Set([...adminIds, ...nonAdminApi.map((m) => m.id)]);
-    const uniqueSeed = seedMatches.filter((m) => !apiAndAdminIds.has(m.id));
-    return [...convertedAdmin, ...nonAdminApi, ...uniqueSeed];
+
+    return [...convertedAdmin, ...nonAdminApi];
   }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
   const value: BetrixState = {
