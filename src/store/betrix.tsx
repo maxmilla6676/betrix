@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { matchById, isMatchLocked, matches as seedMatches, type Match } from "@/data/football";
-import { fetchLiveSportsFixtures } from "@/services/sportsApi";
+import { matchById, teamById, isMatchLocked, matches as seedMatches, type Match } from "@/data/football";
+import { fetchLiveSportsFixtures, dynamicTeams } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
 import { toast } from "sonner";
 import {
@@ -302,8 +302,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       if (seenIds.has(m.id)) continue;
       seenIds.add(m.id);
 
-      const hName = (teamById(m.homeId)?.name || m.homeId).toLowerCase().replace(/[^a-z0-9]/g, "");
-      const aName = (teamById(m.awayId)?.name || m.awayId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const hName = (teamById(m.homeId)?.name || dynamicTeams.get(m.homeId)?.name || m.homeId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const aName = (teamById(m.awayId)?.name || dynamicTeams.get(m.awayId)?.name || m.awayId).toLowerCase().replace(/[^a-z0-9]/g, "");
       const pairKey = `${hName}___${aName}`;
       if (seenPairs.has(pairKey)) continue;
       seenPairs.add(pairKey);
