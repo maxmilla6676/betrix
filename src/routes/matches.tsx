@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { PrimeMatchCard } from "@/components/match/PrimeMatchCard";
 import { PrimeDateHeader, generateDateOptions, type DateOption } from "@/components/match/PrimeDateHeader";
@@ -52,6 +52,7 @@ export function MatchesPage() {
   }, [selectedDate]);
 
   // Combine store matches with date-specific matches including admin matches for that date
+  // Sort: LIVE first (by minute desc), then SCHEDULED ascending by kickoff time
   const currentList = useMemo(() => {
     const adminForDate = allMatches.filter((m) => {
       if (!m.id.startsWith("adm-") && !m.id.startsWith("admin-")) return false;
@@ -59,12 +60,23 @@ export function MatchesPage() {
       return mDate === selectedDate.iso || m.status === "LIVE";
     });
 
+    let combined: Match[];
     if (dateMatches.length > 0) {
       const existingIds = new Set(dateMatches.map((m) => m.id));
       const filteredAdmin = adminForDate.filter((m) => !existingIds.has(m.id));
-      return [...filteredAdmin, ...dateMatches];
+      combined = [...filteredAdmin, ...dateMatches];
+    } else {
+      combined = [...allMatches];
     }
-    return allMatches;
+
+    return combined.sort((a, b) => {
+      if (a.status === "LIVE" && b.status !== "LIVE") return -1;
+      if (b.status === "LIVE" && a.status !== "LIVE") return 1;
+      if (a.status === "LIVE" && b.status === "LIVE") return (b.minute ?? 0) - (a.minute ?? 0);
+      if (a.status === "FINISHED" && b.status !== "FINISHED") return 1;
+      if (b.status === "FINISHED" && a.status !== "FINISHED") return -1;
+      return a.kickoff.localeCompare(b.kickoff);
+    });
   }, [dateMatches, allMatches, selectedDate.iso]);
 
   const allAvailableLeagues = useMemo(() => {
