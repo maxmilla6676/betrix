@@ -31,6 +31,7 @@ import {
   CreditCard,
   Plus,
   RotateCcw,
+  Trophy,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,7 @@ import {
   DailyRevenueHistoryCard,
   formatGHC,
 } from "@/components/admin/DailyRevenueHistoryCard";
+import { AdminMatchManager } from "@/components/admin/AdminMatchManager";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -209,34 +211,28 @@ function AdminPage() {
           </p>
         </div>
 
-        {/* ── TOP STAT CARDS (2 Columns: Vibrant Red-Purple-Blue Gradient) ── */}
+        {/* ── TOP STAT CARDS ROW 1: Revenue (gradient) ── */}
         <div className="grid grid-cols-2 gap-3">
-          {/* 1. Total Revenue Card */}
+          {/* 1. Total Revenue */}
           <div className="relative rounded-2xl p-4 md:p-5 text-white shadow-md bg-gradient-to-r from-[#cf143a] via-[#7329cd] to-[#2552df] overflow-hidden flex flex-col justify-between min-h-[110px]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white/90 tracking-wide">
-                Total Revenue
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 text-white/80" />
+              <span className="text-xs font-bold text-white/90 tracking-wide">Total Revenue</span>
+              <DollarSign className="h-3.5 w-3.5 text-white/70" />
             </div>
             <p className="text-2xl md:text-3xl font-black font-mono tracking-tight text-white mt-2">
               {formatGHC(totalRevenue)}
             </p>
           </div>
 
-          {/* 2. Today's Revenue Card (With small calendar logo at bottom right!) */}
+          {/* 2. Today's Revenue (calendar toggle bottom-right) */}
           <div className="relative rounded-2xl p-4 md:p-5 text-white shadow-md bg-gradient-to-r from-[#cf143a] via-[#7329cd] to-[#2552df] overflow-hidden flex flex-col justify-between min-h-[110px]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white/90 tracking-wide leading-tight">
-                Today's<br className="sm:hidden" /> Revenue
-              </span>
+              <span className="text-xs font-bold text-white/90 tracking-wide leading-tight">Today's<br className="sm:hidden" /> Revenue</span>
               <ChevronDown className="h-3.5 w-3.5 text-white/80" />
             </div>
             <p className="text-2xl md:text-3xl font-black font-mono tracking-tight text-white mt-2">
               {formatGHC(todayRevenue)}
             </p>
-
-            {/* Small Calendar Logo on the Right Bottom */}
             <button
               type="button"
               onClick={() => setShowDailyHistory(!showDailyHistory)}
@@ -253,71 +249,59 @@ function AdminPage() {
           </div>
         </div>
 
-        {/* ── DAILY REVENUE HISTORY (Triggered by calendar logo, exact match) ── */}
+        {/* ── DAILY REVENUE HISTORY ── */}
         {showDailyHistory && (
           <div className="animate-in fade-in-50 duration-300">
             <DailyRevenueHistoryCard />
           </div>
         )}
 
-        {/* ── MIDDLE & BOTTOM STAT CARDS (2x2 Grid with Red Chevron) ── */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Card 3: Partners */}
-          <div
-            onClick={() => setActiveTab("partners")}
-            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
-          >
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-bold">Partners</span>
-              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
-            </div>
-            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
-              {totalPartnersCount}
-            </p>
-          </div>
-
-          {/* Card 4: Members */}
+        {/* ── STAT CARDS ROW 2: Members, Partners, Dev Commission ── */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* 3. Total Members */}
           <div
             onClick={() => setActiveTab("users")}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
           >
             <div className="flex items-center justify-between text-gray-500">
               <span className="text-xs font-bold">Members</span>
-              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+              <Users2 className="h-3.5 w-3.5 text-red-500" />
             </div>
             <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
               {totalUsersCount}
             </p>
+            <span className="text-[10px] text-gray-400 mt-1">Registered users</span>
           </div>
 
-          {/* Card 5: Analyses / Bets */}
-          <div
-            onClick={() => setActiveTab("matches")}
-            className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
-          >
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-bold">Analyses</span>
-              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
-            </div>
-            <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
-              {activeAnalysesCount}
-            </p>
-          </div>
-
-          {/* Card 6: Pending payments / Partner queue */}
+          {/* 4. Total Partners */}
           <div
             onClick={() => setActiveTab("partners")}
             className="bg-white rounded-2xl p-4 border border-gray-100 shadow-2xs cursor-pointer hover:border-gray-200 transition-all flex flex-col justify-between min-h-[95px]"
           >
             <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-bold leading-tight">
-                Pending<br className="sm:hidden" /> payments
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 text-red-500" />
+              <span className="text-xs font-bold">Partners</span>
+              <Globe className="h-3.5 w-3.5 text-red-500" />
             </div>
             <p className="text-2xl font-black text-gray-900 mt-2 font-mono">
-              {pendingPaymentsCount}
+              {totalPartnersCount}
             </p>
+            <span className="text-[10px] text-gray-400 mt-1">Active affiliates</span>
+          </div>
+
+          {/* 5. Dev Commission (20% of today's revenue) */}
+          <div
+            onClick={() => setActiveTab("payments")}
+            className="bg-white rounded-2xl p-4 border border-purple-100 shadow-2xs cursor-pointer hover:border-purple-200 transition-all flex flex-col justify-between min-h-[95px] relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50 to-indigo-50 opacity-60" />
+            <div className="relative flex items-center justify-between text-purple-700">
+              <span className="text-xs font-bold">Dev Commission</span>
+              <Percent className="h-3.5 w-3.5 text-purple-400" />
+            </div>
+            <p className="relative text-2xl font-black text-purple-900 mt-2 font-mono">
+              {formatGHC(todayRevenue * 0.20)}
+            </p>
+            <span className="relative text-[10px] text-purple-400 mt-1">20% of today's income</span>
           </div>
         </div>
 
@@ -478,14 +462,14 @@ function AdminPage() {
               <div className="rounded-xl p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-100 flex items-center justify-between">
                 <div>
                   <span className="text-xs font-bold text-purple-900">
-                    Developer 30% Daily Commission
+                    Developer 20% Daily Commission
                   </span>
                   <p className="text-[11px] text-purple-700">
-                    Calculated automatically from today's incoming platform deposits:
+                    20% of today's incoming platform deposits (auto-calculated):
                   </p>
                 </div>
                 <span className="font-mono text-base font-black text-purple-900">
-                  {formatGHC(devCommission)}
+                  {formatGHC(todayRevenue * 0.20)}
                 </span>
               </div>
 
@@ -767,37 +751,30 @@ function AdminPage() {
             </div>
           )}
 
-          {/* TAB 6: MATCHES */}
+          {/* TAB 6: MATCHES — Admin Match & League Manager */}
           {activeTab === "matches" && (
-            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3">
-                <div>
-                  <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-emerald-600" /> Free Sports API Management
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    Live match fixtures, real scores, elapsed minute & betting markets.
-                  </p>
+            <div className="space-y-4">
+              <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-3 mb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-red-500" /> Match & League Manager
+                    </h3>
+                    <p className="text-xs text-gray-400">
+                      Add custom leagues and matches with logos, kickoff times, and predetermined outcomes.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => fetchApiMatches()}
+                    disabled={isApiLoading}
+                    className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", isApiLoading && "animate-spin")} />
+                    {isApiLoading ? "Syncing..." : "Sync Live API"}
+                  </Button>
                 </div>
-
-                <Button
-                  size="sm"
-                  onClick={() => fetchApiMatches()}
-                  disabled={isApiLoading}
-                  className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", isApiLoading && "animate-spin")} />
-                  {isApiLoading ? "Syncing API..." : "Sync Live Matches"}
-                </Button>
-              </div>
-
-              <div className="p-3 bg-gray-50 rounded-xl text-xs flex items-center justify-between">
-                <span className="text-gray-500">
-                  Last API Sync: <strong className="text-gray-800">{lastApiUpdate || "Auto (Live)"}</strong>
-                </span>
-                <span className="text-emerald-700 font-bold">
-                  {apiLiveCount} matches actively in-play
-                </span>
+                <AdminMatchManager />
               </div>
             </div>
           )}
