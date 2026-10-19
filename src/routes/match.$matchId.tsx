@@ -34,6 +34,7 @@ import {
   type Team,
   type League,
 } from "@/data/football";
+import { GHANA_TZ } from "@/lib/ghana-time";
 
 export const Route = createFileRoute("/match/$matchId")({
   loader: ({ params }) => {
@@ -346,7 +347,7 @@ function MatchDetailPage() {
       id: String(Date.now()),
       user: "You",
       text: newMsg.trim(),
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: GHANA_TZ }),
     };
     setChatMessages((prev) => {
       const next = [...prev, item];
@@ -374,10 +375,10 @@ function MatchDetailPage() {
 
   const matchDate = useMemo(() => {
     const d = new Date(match.kickoff);
-    const dayNum = String(d.getDate()).padStart(2, "0");
-    const monthNum = String(d.getMonth() + 1).padStart(2, "0");
-    const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
-    const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    const dayNum = d.toLocaleDateString("en-GB", { day: "2-digit", timeZone: GHANA_TZ });
+    const monthNum = d.toLocaleDateString("en-GB", { month: "2-digit", timeZone: GHANA_TZ });
+    const dayName = d.toLocaleDateString("en-US", { weekday: "long", timeZone: GHANA_TZ });
+    const timeStr = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: GHANA_TZ });
     return { dateStr: `${dayNum}/${monthNum}`, dayName, timeStr };
   }, [match.kickoff]);
 

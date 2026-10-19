@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { GHANA_TZ } from "@/lib/ghana-time";
 import {
   Activity,
   ArrowLeft,
@@ -479,7 +480,7 @@ function AdminPage() {
                       <div key={tx.id} className="p-3 flex items-center justify-between hover:bg-[#1e1e26] text-xs">
                         <div className="space-y-0.5">
                           <p className="font-mono font-bold text-white">{tx.reference}</p>
-                          <p className="text-[10px] text-gray-500">{tx.method} • {new Date(tx.createdAt).toLocaleTimeString()}</p>
+                          <p className="text-[10px] text-gray-500">{tx.method} • {new Date(tx.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: GHANA_TZ })}</p>
                         </div>
                         <span className="font-mono font-black text-emerald-600">
                           +{formatGHC(tx.amount)}

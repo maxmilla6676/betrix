@@ -10,6 +10,7 @@ import {
 import { useBetrix, type DailyRevenueEntry } from "@/store/betrix";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { GHANA_TZ } from "@/lib/ghana-time";
 
 export const formatGHC = (n: number) => {
   if (n === 0) return "GH₵0";
@@ -47,9 +48,9 @@ export function DailyRevenueHistoryCard() {
       const d = new Date(anchor.getTime() - i * 86400000);
       const iso = d.toISOString().slice(0, 10);
       const isToday = iso === todayISO;
-      const dayName = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase().slice(0, 2);
-      const dayNum = d.toLocaleDateString("en-US", { day: "numeric" });
-      const month = d.toLocaleDateString("en-US", { month: "short" });
+      const dayName = d.toLocaleDateString("en-US", { weekday: "short", timeZone: GHANA_TZ }).toUpperCase().slice(0, 2);
+      const dayNum = d.toLocaleDateString("en-US", { day: "numeric", timeZone: GHANA_TZ });
+      const month = d.toLocaleDateString("en-US", { month: "short", timeZone: GHANA_TZ });
 
       const stats = getRevenueForDate(iso);
 

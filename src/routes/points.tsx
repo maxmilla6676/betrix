@@ -6,6 +6,7 @@ import { formatGHS, useBetrix } from "@/store/betrix";
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { GHANA_TZ } from "@/lib/ghana-time";
 
 export const Route = createFileRoute("/points")({
   head: () => ({
@@ -92,7 +93,7 @@ function WalletPage() {
             <div className="min-w-0">
               <p className="truncate text-sm font-extrabold text-white">{l.label}</p>
               <p className="tabular text-xs text-gray-400 font-medium">
-                {new Date(l.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                {new Date(l.at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: GHANA_TZ })}
               </p>
             </div>
             <span

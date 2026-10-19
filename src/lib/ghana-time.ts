@@ -92,6 +92,7 @@ export interface GhanaDateOption {
   dayName: string;
   dateFormatted: string;
   isoDate: string;
+  iso: string;
   espnParam: string;
 }
 
@@ -116,7 +117,7 @@ export function generateGhanaDateOptions(): GhanaDateOption[] {
     const isoDate = `${y}-${moPadded}-${dayPadded}`;
     const espnParam = `${y}${moPadded}${dayPadded}`;
 
-    options.push({ id: isoDate, label: dateFormatted, shortLabel, dayName, dateFormatted, isoDate, espnParam });
+    options.push({ id: isoDate, label: dateFormatted, shortLabel, dayName, dateFormatted, isoDate, iso: isoDate, espnParam });
   }
 
   return options;

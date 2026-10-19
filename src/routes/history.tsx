@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, selectionMatch, type Selection, type HistoryEntry } from "@/store/betrix";
 import { teamById } from "@/data/football";
 import { cn } from "@/lib/utils";
+import { GHANA_TZ } from "@/lib/ghana-time";
 import { HowToCashoutModal } from "@/components/common/HowToCashoutModal";
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
 import {
@@ -847,7 +848,7 @@ function HistoryPage() {
                   className="flex items-center gap-1 text-[10px] font-bold bg-[#1a3a28] text-[#22c55e] border border-[#22c55e]/30 px-2 py-1 rounded-md hover:bg-red-900/30 hover:text-red-400 hover:border-red-800/40 transition-colors"
                   title="Clear date filter"
                 >
-                  {new Date(historyDateFilter + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                  {new Date(historyDateFilter + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: GHANA_TZ })}
                   <X className="h-2.5 w-2.5" />
                 </button>
               )}
@@ -926,8 +927,8 @@ function HistoryPage() {
                 {filteredSettledBets.map((h) => {
                   // Parse date for the left date column
                   const dateObj = new Date(h.createdAt);
-                  const day = dateObj.getDate();
-                  const mon = dateObj.toLocaleString("en-US", { month: "short" });
+                  const day = dateObj.toLocaleDateString("en-GB", { day: "numeric", timeZone: GHANA_TZ });
+                  const mon = dateObj.toLocaleDateString("en-US", { month: "short", timeZone: GHANA_TZ });
 
                   // Matches preview: show up to 3, then "...(and N other matches)"
                   const matchPreviews = h.selections.slice(0, 3).map(s => s.matchTitle || "Match");

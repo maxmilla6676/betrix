@@ -352,11 +352,11 @@ export function formatKickoff(iso: string) {
 }
 
 export function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: GHANA_TZ });
 }
 
 export function formatDayLabel(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "2-digit" });
+  return new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: GHANA_TZ });
 }
 
 /** Landing categories shown as coloured tiles on the home page. */
