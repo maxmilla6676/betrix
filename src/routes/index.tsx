@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Radio,
   Flame,
+  Lock,
 } from "lucide-react";
 import { LoadCodeModal } from "@/components/common/LoadCodeModal";
 import {
@@ -186,6 +187,7 @@ function FixtureRow({
       <div className="flex items-center gap-1.5 shrink-0">
         {marketOptions.map((opt) => {
           const active = isSelected(match.id, selectedMarket, opt.id);
+          const isFinished = match.status === "FINISHED";
 
           return (
             <button
@@ -193,7 +195,8 @@ function FixtureRow({
               type="button"
               disabled={disabled}
               aria-pressed={active}
-              onClick={() =>
+              onClick={() => {
+                if (disabled) return;
                 toggleSelection({
                   matchId: match.id,
                   marketId: selectedMarket,
@@ -201,17 +204,25 @@ function FixtureRow({
                   optionId: opt.id,
                   optionLabel: opt.label,
                   multiplier: opt.multiplier,
-                })
-              }
+                });
+              }}
               className={cn(
-                "flex h-11 w-12 sm:w-14 flex-col items-center justify-center rounded-lg font-black text-xs transition-all duration-150 active:scale-[0.96] border",
-                "disabled:cursor-not-allowed disabled:opacity-40",
-                active
-                  ? "bg-[#F5C400] text-black border-[#F5C400] shadow-[0_0_10px_rgba(245,196,0,0.4)]"
-                  : "bg-[#1f1f26] text-white hover:bg-[#272730] border-[#292933]"
+                "flex h-11 w-12 sm:w-14 flex-col items-center justify-center rounded-lg font-black text-xs transition-all duration-150 border",
+                isFinished
+                  ? "bg-[#141418] border-[#22222a] text-gray-500 cursor-not-allowed opacity-60"
+                  : active
+                  ? "bg-[#F5C400] text-black border-[#F5C400] shadow-[0_0_10px_rgba(245,196,0,0.4)] active:scale-[0.96]"
+                  : "bg-[#1f1f26] text-white hover:bg-[#272730] border-[#292933] active:scale-[0.96]"
               )}
             >
-              <span className="text-xs font-extrabold tabular-nums">{opt.multiplier.toFixed(2)}</span>
+              {isFinished ? (
+                <div className="flex flex-col items-center justify-center gap-0.5">
+                  <Lock className="h-3.5 w-3.5 text-gray-500" />
+                  <span className="text-[8px] font-black text-gray-500 uppercase tracking-tight">Locked</span>
+                </div>
+              ) : (
+                <span className="text-xs font-extrabold tabular-nums">{opt.multiplier.toFixed(2)}</span>
+              )}
             </button>
           );
         })}

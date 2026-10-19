@@ -15,6 +15,7 @@ import {
   Share2,
   Zap,
   TrendingUp,
+  Lock,
 } from "lucide-react";
 import { LiveBadge } from "@/components/match/LiveMatchCard";
 import { TeamCrest } from "@/components/common/TeamCrest";
@@ -429,6 +430,15 @@ function MatchDetailPage() {
                     {match.homeScore ?? 0} - {match.awayScore ?? 0}
                   </div>
                 </>
+              ) : match.status === "FINISHED" ? (
+                <>
+                  <span className="rounded bg-gray-700/60 px-2 py-0.5 text-[10px] font-black text-gray-300">
+                    FULL TIME (FT)
+                  </span>
+                  <div className="text-2xl font-black tabular-nums tracking-widest text-white">
+                    {match.homeScore ?? 0} - {match.awayScore ?? 0}
+                  </div>
+                </>
               ) : (
                 <>
                   <span className="text-[11px] font-semibold text-gray-400">{matchDate.dateStr}</span>
@@ -453,9 +463,16 @@ function MatchDetailPage() {
             <span className="text-gray-600">|</span>
             <span className="flex items-center gap-1 text-[#F5C400]">
               <PlayCircle className="h-3.5 w-3.5 fill-[#F5C400]/20 text-[#F5C400]" />
-              Live In-Play Available
+              {match.status === "FINISHED" ? "Match Ended" : match.status === "LIVE" ? "Live In-Play" : "Upcoming Scheduled"}
             </span>
           </div>
+
+          {match.status === "FINISHED" && (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">
+              <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+              <span>This match has finished. All betting markets and odds are locked.</span>
+            </div>
+          )}
         </div>
 
         {/* Main Segmented Tabs: Markets | Stats | Chat */}
@@ -557,6 +574,7 @@ function MatchDetailPage() {
                   const isCollapsed = collapsedMarkets[market.id];
                   const isStarred = starredMarkets[market.id];
 
+                  const isMatchFinished = match.status === "FINISHED";
                   if (market.id === "m_correct_score") {
                     return (
                       <CorrectScoreMarketCard
@@ -566,6 +584,7 @@ function MatchDetailPage() {
                         awayName={away.name}
                         starred={isStarred}
                         isCollapsed={isCollapsed}
+                        isMatchFinished={isMatchFinished}
                         onToggleCollapse={() => toggleCollapse(market.id)}
                         onStarToggle={(e) => toggleStar(market.id, e)}
                         isSelected={isSelected}
@@ -591,9 +610,13 @@ function MatchDetailPage() {
                             <ChevronUp className="h-4 w-4 text-[#F5C400] shrink-0" />
                           )}
                           <span className="truncate text-xs font-extrabold tracking-tight">{market.name}</span>
-                          {market.info && (
+                          {isMatchFinished ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-gray-800 px-1.5 py-0.5 text-[9px] font-bold text-gray-400">
+                              <Lock className="h-2.5 w-2.5" /> Locked
+                            </span>
+                          ) : market.info ? (
                             <Info className="h-3 w-3 text-gray-500 hover:text-gray-300 shrink-0" title={market.info} />
-                          )}
+                          ) : null}
                         </div>
 
                         <button
@@ -621,7 +644,9 @@ function MatchDetailPage() {
                                 <button
                                   key={opt.id}
                                   type="button"
-                                  onClick={() =>
+                                  disabled={isMatchFinished}
+                                  onClick={() => {
+                                    if (isMatchFinished) return;
                                     toggleSelection({
                                       matchId: match.id,
                                       marketId: market.id,
@@ -629,13 +654,15 @@ function MatchDetailPage() {
                                       optionId: opt.id,
                                       optionLabel: opt.label,
                                       multiplier: opt.multiplier,
-                                    })
-                                  }
+                                    });
+                                  }}
                                   className={cn(
-                                    "group relative flex flex-col justify-between rounded-lg border p-2.5 text-left transition-all duration-150 active:scale-[0.97]",
-                                    active
-                                      ? "border-[#F5C400] bg-[#292200] shadow-[0_0_12px_rgba(245,196,0,0.25)]"
-                                      : "border-[#272730] bg-[#1a1a20] hover:border-[#383845] hover:bg-[#202028]"
+                                    "group relative flex flex-col justify-between rounded-lg border p-2.5 text-left transition-all duration-150",
+                                    isMatchFinished
+                                      ? "border-[#202028] bg-[#141418] opacity-60 cursor-not-allowed"
+                                      : active
+                                      ? "border-[#F5C400] bg-[#292200] shadow-[0_0_12px_rgba(245,196,0,0.25)] active:scale-[0.97]"
+                                      : "border-[#272730] bg-[#1a1a20] hover:border-[#383845] hover:bg-[#202028] active:scale-[0.97]"
                                   )}
                                 >
                                   {/* Label on top */}
@@ -645,14 +672,20 @@ function MatchDetailPage() {
 
                                   {/* Multiplier / Odds value at bottom right */}
                                   <div className="mt-1 flex items-center justify-end">
-                                    <span
-                                      className={cn(
-                                        "text-sm font-black tabular-nums tracking-tight",
-                                        active ? "text-[#F5C400]" : "text-[#F5C400]"
-                                      )}
-                                    >
-                                      {opt.multiplier.toFixed(2)}
-                                    </span>
+                                    {isMatchFinished ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500">
+                                        <Lock className="h-3 w-3" /> Locked
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className={cn(
+                                          "text-sm font-black tabular-nums tracking-tight",
+                                          active ? "text-[#F5C400]" : "text-[#F5C400]"
+                                        )}
+                                      >
+                                        {opt.multiplier.toFixed(2)}
+                                      </span>
+                                    )}
                                   </div>
                                 </button>
                               );
@@ -885,6 +918,7 @@ function CorrectScoreMarketCard({
                       odds={hItem.odds}
                       isSelected={isSelected}
                       toggleSelection={toggleSelection}
+                      disabled={isMatchFinished}
                     />
                   ) : (
                     <div />
@@ -898,6 +932,7 @@ function CorrectScoreMarketCard({
                       odds={dItem.odds}
                       isSelected={isSelected}
                       toggleSelection={toggleSelection}
+                      disabled={isMatchFinished}
                     />
                   ) : (
                     <div />
@@ -911,6 +946,7 @@ function CorrectScoreMarketCard({
                       odds={aItem.odds}
                       isSelected={isSelected}
                       toggleSelection={toggleSelection}
+                      disabled={isMatchFinished}
                     />
                   ) : (
                     <div />
@@ -931,22 +967,25 @@ function ScoreButton({
   odds,
   isSelected,
   toggleSelection,
+  disabled = false,
 }: {
   matchId: string;
   score: string;
   odds: number;
   isSelected: (mId: string, mktId: string, optId: string) => boolean;
   toggleSelection: (sel: any) => void;
+  disabled?: boolean;
 }) {
   const optId = `cs-${score}`;
   const active = isSelected(matchId, "m_correct_score", optId);
-  const disabled = odds <= 0;
+  const isButtonDisabled = disabled || odds <= 0;
 
   return (
     <button
       type="button"
-      disabled={disabled}
-      onClick={() =>
+      disabled={isButtonDisabled}
+      onClick={() => {
+        if (isButtonDisabled) return;
         toggleSelection({
           matchId,
           marketId: "m_correct_score",
@@ -954,23 +993,29 @@ function ScoreButton({
           optionId: optId,
           optionLabel: score,
           multiplier: odds,
-        })
-      }
+        });
+      }}
       className={cn(
-        "h-10 px-2.5 rounded-lg border flex items-center justify-between text-xs font-bold transition-all active:scale-95",
-        disabled
+        "h-10 px-2.5 rounded-lg border flex items-center justify-between text-xs font-bold transition-all",
+        isButtonDisabled
           ? "bg-[#141720]/60 border-[#1f2638]/60 text-gray-600 cursor-not-allowed"
           : active
-          ? "bg-[#F5C400] border-[#F5C400] text-black font-black shadow-md shadow-[#F5C400]/20"
-          : "bg-[#11141c] border-[#252c3d] text-gray-200 hover:border-[#F5C400]/60 hover:bg-[#181d29]"
+          ? "bg-[#F5C400] border-[#F5C400] text-black font-black shadow-md shadow-[#F5C400]/20 active:scale-95"
+          : "bg-[#11141c] border-[#252c3d] text-gray-200 hover:border-[#F5C400]/60 hover:bg-[#181d29] active:scale-95"
       )}
     >
       <span className={cn("font-bold text-xs", active ? "text-black font-black" : "text-gray-300")}>
         {score}
       </span>
-      <span className={cn("font-black text-xs font-mono", active ? "text-black" : "text-[#F5C400]")}>
-        {disabled ? "—" : odds.toFixed(2)}
-      </span>
+      {disabled ? (
+        <span className="inline-flex items-center gap-0.5 text-[10px] text-gray-500">
+          <Lock className="h-2.5 w-2.5" /> Locked
+        </span>
+      ) : (
+        <span className={cn("font-black text-xs font-mono", active ? "text-black" : "text-[#F5C400]")}>
+          {odds <= 0 ? "—" : odds.toFixed(2)}
+        </span>
+      )}
     </button>
   );
 }

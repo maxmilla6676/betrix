@@ -13,6 +13,7 @@ import {
   Link2,
   MessageSquare,
   Send,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, type HistoryEntry, type Selection } from "@/store/betrix";
@@ -549,6 +550,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
           ) : (
             slip.map((s) => {
               const match = matchById(s.matchId);
+              const isFinished = match?.status === "FINISHED";
               const home = match ? teamById(match.homeId)?.name : "Home";
               const away = match ? teamById(match.awayId)?.name : "Away";
               const key = `${s.matchId}-${s.marketId}`;
@@ -557,7 +559,12 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
               return (
                 <div
                   key={key}
-                  className="bg-[#12141c] border border-[#1e2230] rounded-xl p-3 space-y-2 relative group hover:border-[#F5C400]/40 transition-colors"
+                  className={cn(
+                    "border rounded-xl p-3 space-y-2 relative group transition-colors",
+                    isFinished
+                      ? "bg-[#141214] border-red-900/40"
+                      : "bg-[#12141c] border-[#1e2230] hover:border-[#F5C400]/40"
+                  )}
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -568,6 +575,11 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
                         {s.marketName}:{" "}
                         <span className="font-bold text-[#F5C400]">{s.optionLabel}</span>
                       </p>
+                      {isFinished && (
+                        <span className="inline-flex items-center gap-1 mt-1 rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/25">
+                          <Lock className="h-2.5 w-2.5" /> Match Ended — Odds Locked
+                        </span>
+                      )}
                     </div>
                     <button
                       onClick={() =>
@@ -659,6 +671,14 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
               </div>
             </div>
 
+            {/* Locked matches warning */}
+            {slip.some((s) => matchById(s.matchId)?.status === "FINISHED") && (
+              <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-2.5 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                <Lock className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                <span>One or more matches have ended. Odds are locked — please remove them to place bet.</span>
+              </div>
+            )}
+
             {/* Low balance warning */}
             {isInsufficient && (
               <div className="bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl p-2.5 text-xs font-semibold text-center">
@@ -682,7 +702,11 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
               {/* Place Bet Button */}
               <button
                 type="button"
-                disabled={totalStake <= 0 || isInsufficient}
+                disabled={
+                  totalStake <= 0 ||
+                  isInsufficient ||
+                  slip.some((s) => matchById(s.matchId)?.status === "FINISHED")
+                }
                 onClick={() => setConfirmed(confirmSlip(totalStake))}
                 className="flex items-center justify-center h-12 rounded-xl bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs uppercase tracking-wider shadow-md transition-all disabled:opacity-50 active:scale-95"
               >

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { matchById, matches as seedMatches, type Match } from "@/data/football";
 import { fetchLiveSportsFixtures } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
+import { toast } from "sonner";
 import {
   type AdminLeague,
   type AdminMatch,
@@ -827,6 +828,13 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => setIsLoggedIn(false), []);
 
   const toggleSelection = useCallback((s: Selection) => {
+    // Check if match has finished
+    const targetMatch = matchById(s.matchId);
+    if (targetMatch && targetMatch.status === "FINISHED") {
+      toast.error("This match has finished. Odds are locked and betting is closed.");
+      return;
+    }
+
     setSlip((prev) => {
       const same = prev.find((p) => p.matchId === s.matchId && p.marketId === s.marketId);
       if (same && same.optionId === s.optionId) {
@@ -859,6 +867,16 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
   const confirmSlip = useCallback(
     (stake: number) => {
+      // Validate that no finished matches are in the slip
+      const finishedSelection = slip.find((s) => {
+        const m = matchById(s.matchId);
+        return m && m.status === "FINISHED";
+      });
+      if (finishedSelection) {
+        toast.error("Cannot place bet: One or more matches in your slip have finished and odds are locked.");
+        throw new Error("Match has finished");
+      }
+
       const entry: HistoryEntry = {
         code: makeCode(),
         createdAt: new Date().toISOString(),

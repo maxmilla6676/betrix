@@ -716,19 +716,32 @@ function LivePage() {
                             const opt = opts[i];
                             if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
                             const active = isSelected(m.id, market?.id || "1x2", opt.id);
+                            const isFinished = m.status === "FINISHED";
                             return (
                               <button
                                 key={opt.id}
-                                onClick={() => toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier })}
+                                disabled={isFinished}
+                                onClick={() => {
+                                  if (isFinished) return;
+                                  toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier });
+                                }}
                                 className={cn(
                                   "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
-                                  active
+                                  isFinished
+                                    ? "bg-[#0b0e14] border-[#141824] text-gray-600 cursor-not-allowed opacity-50"
+                                    : active
                                     ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
                                     : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
                                 )}
                               >
-                                <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
-                                <span>{opt.multiplier.toFixed(2)}</span>
+                                {isFinished ? (
+                                  <Lock className="w-3 h-3 text-gray-500" />
+                                ) : (
+                                  <>
+                                    <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
+                                    <span>{opt.multiplier.toFixed(2)}</span>
+                                  </>
+                                )}
                               </button>
                             );
                           })}
@@ -780,19 +793,32 @@ function LivePage() {
                             const opt = opts[i];
                             if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
                             const active = isSelected(m.id, market?.id || "1x2", opt.id);
+                            const isFinished = m.status === "FINISHED";
                             return (
                               <button
                                 key={opt.id}
-                                onClick={() => toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier })}
+                                disabled={isFinished}
+                                onClick={() => {
+                                  if (isFinished) return;
+                                  toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier });
+                                }}
                                 className={cn(
                                   "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
-                                  active
+                                  isFinished
+                                    ? "bg-[#0b0e14] border-[#141824] text-gray-600 cursor-not-allowed opacity-50"
+                                    : active
                                     ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
                                     : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
                                 )}
                               >
-                                <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
-                                <span>{opt.multiplier.toFixed(2)}</span>
+                                {isFinished ? (
+                                  <Lock className="w-3 h-3 text-gray-500" />
+                                ) : (
+                                  <>
+                                    <span className="text-[8px] font-bold opacity-60">{opt.label}</span>
+                                    <span>{opt.multiplier.toFixed(2)}</span>
+                                  </>
+                                )}
                               </button>
                             );
                           })}
