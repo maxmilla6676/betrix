@@ -226,6 +226,8 @@ export async function fetchLiveSportsFixtures(selectedSourceIds?: string[], targ
     : FREE_SPORTS_SOURCES;
 
   const matches: Match[] = [];
+  const seenIds = new Set<string>();
+  const seenMatchKeys = new Set<string>();
   let sourcesFetched = 0;
 
   for (const source of sourcesToFetch) {
@@ -306,6 +308,17 @@ export async function fetchLiveSportsFixtures(selectedSourceIds?: string[], targ
         const awayScore = awayComp.score != null ? parseInt(awayComp.score, 10) : undefined;
 
         const matchId = `api-${ev.id}`;
+        if (seenIds.has(matchId)) continue;
+
+        const cleanH = (homeTeam.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const cleanA = (awayTeam.name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+        if (!cleanH || !cleanA || cleanH === cleanA) continue;
+
+        const matchPairKey = `${cleanH}__vs__${cleanA}`;
+        if (seenMatchKeys.has(matchPairKey)) continue;
+
+        seenIds.add(matchId);
+        seenMatchKeys.add(matchPairKey);
         const venueName = comp.venue?.fullName
           ? `${comp.venue.fullName}${comp.venue.address?.city ? `, ${comp.venue.address.city}` : ""}`
           : "Standard Arena";

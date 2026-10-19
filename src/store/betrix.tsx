@@ -293,7 +293,25 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     const adminIds = new Set(convertedAdmin.map((m) => m.id));
     const nonAdminApi = apiMatches.filter((m) => !adminIds.has(m.id));
 
-    return [...convertedAdmin, ...nonAdminApi];
+    const combined = [...convertedAdmin, ...nonAdminApi];
+    const seenIds = new Set<string>();
+    const seenPairs = new Set<string>();
+    const deduplicated: Match[] = [];
+
+    for (const m of combined) {
+      if (seenIds.has(m.id)) continue;
+      seenIds.add(m.id);
+
+      const hName = (teamById(m.homeId)?.name || m.homeId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const aName = (teamById(m.awayId)?.name || m.awayId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const pairKey = `${hName}___${aName}`;
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+
+      deduplicated.push(m);
+    }
+
+    return deduplicated;
   }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
   // Revenue & Stat overrides (null by default to use real live data)

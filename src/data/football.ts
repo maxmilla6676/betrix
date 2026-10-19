@@ -284,44 +284,6 @@ const DAY = 86400000;
 /** Base date anchored to Ghana midnight (UTC+0) so demo data is timezone-correct. */
 const base = todayMidnightGhana();
 
-type Pair = [string, string, string, number, MatchStatus, string];
-
-const pairs: Pair[] = [
-  ["t1", "t2", "l1", 0, "LIVE", "Old Trafford"],
-  ["t3", "t5", "l1", 0, "LIVE", "Anfield"],
-  ["t9", "t11", "l2", 0, "LIVE", "Santiago Bernabéu"],
-  ["t17", "t19", "l4", 0, "LIVE", "Allianz Arena"],
-  ["t39", "t40", "l10", 0, "LIVE", "Macau Arena"],
-  ["t31", "t33", "l8", 0, "LIVE", "TD Garden"],
-  ["t43", "t46", "l11", 0, "LIVE", "Centre Court"],
-  ["t4", "t6", "l1", 0, "SCHEDULED", "Etihad Stadium"],
-  ["t7", "t8", "l1", 0, "SCHEDULED", "St James' Park"],
-  ["t10", "t12", "l2", 0, "SCHEDULED", "Spotify Camp Nou"],
-  ["t25", "t29", "l7", 0, "SCHEDULED", "MetLife Stadium"],
-  ["t35", "t36", "l9", 0, "SCHEDULED", "Yankee Stadium"],
-  ["t41", "t42", "l10", 0, "SCHEDULED", "Macau Arena"],
-  ["t13", "t14", "l3", 1, "SCHEDULED", "San Siro"],
-  ["t15", "t16", "l3", 1, "SCHEDULED", "Allianz Stadium"],
-  ["t18", "t20", "l4", 1, "SCHEDULED", "Signal Iduna Park"],
-  ["t21", "t22", "l5", 1, "SCHEDULED", "Parc des Princes"],
-  ["t26", "t27", "l7", 1, "SCHEDULED", "Estadio Azteca"],
-  ["t32", "t34", "l8", 1, "SCHEDULED", "Crypto.com Arena"],
-  ["t37", "t38", "l9", 1, "SCHEDULED", "Wrigley Field"],
-  ["t23", "t24", "l5", 2, "SCHEDULED", "Stade Louis II"],
-  ["t9", "t17", "l6", 2, "SCHEDULED", "Santiago Bernabéu"],
-  ["t44", "t45", "l11", 2, "SCHEDULED", "Rod Laver Arena"],
-  ["t3", "t21", "l6", 3, "SCHEDULED", "Anfield"],
-  ["t2", "t13", "l6", 3, "SCHEDULED", "Emirates Stadium"],
-  ["t28", "t30", "l7", 3, "SCHEDULED", "BC Place"],
-  ["t5", "t8", "l1", 4, "SCHEDULED", "Stamford Bridge"],
-  ["t16", "t13", "l3", 4, "SCHEDULED", "Stadio Maradona"],
-  ["t20", "t17", "l4", 5, "SCHEDULED", "BayArena"],
-  ["t1", "t3", "l1", -1, "FINISHED", "Old Trafford"],
-  ["t10", "t9", "l2", -1, "FINISHED", "Spotify Camp Nou"],
-  ["t14", "t15", "l3", -2, "FINISHED", "San Siro"],
-  ["t21", "t23", "l5", -2, "FINISHED", "Parc des Princes"],
-];
-
 export const matches: Match[] = [];
 
 export const matchById = (id: string) => dynamicMatchesMap.get(id);

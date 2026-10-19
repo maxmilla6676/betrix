@@ -35,11 +35,11 @@ function espnLogoNba(id: string) {
 
 const extraLiveSportsMatches: any[] = [];
 
-const sportsList = [
-  { id: "football", name: "Football", count: 0, emoji: "⚽" },
-  { id: "basketball", name: "Basketball", count: 0, emoji: "🏀" },
-  { id: "tennis", name: "Tennis", count: 0, emoji: "🎾" },
-  { id: "baseball", name: "Baseball", count: 0, emoji: "⚾" },
+const sportsDefinitions = [
+  { id: "football", name: "Football", emoji: "⚽" },
+  { id: "basketball", name: "Basketball", emoji: "🏀" },
+  { id: "tennis", name: "Tennis", emoji: "🎾" },
+  { id: "baseball", name: "Baseball", emoji: "⚾" },
 ];
 
 const marketTypes = ["1X2", "Over/Under", "BTTS", "Double Chance"];
@@ -66,41 +66,76 @@ function LivePage() {
     });
   }, []);
 
-  // ── Live matches from store ─────────────────────────────────────────────────
+  // ── Live matches from store (strictly deduplicated by ID and team names) ─────
   const storeLive = useMemo(() => {
-    return allMatches
-      .filter((m) => m.status === "LIVE")
-      .map((m) => {
-        const homeTeam = teamById(m.homeId);
-        const awayTeam = teamById(m.awayId);
-        const lg = leagueById(m.leagueId)?.name || "Live Tournament";
-        return {
-          id: m.id,
-          sportId: m.sportId || "football",
-          leagueName: lg,
-          period: `${m.minute || 45}'`,
-          homeName: homeTeam?.name || "Home",
-          homeLogo: homeTeam?.logo,
-          homeColor: homeTeam?.color || "#3B82F6",
-          awayName: awayTeam?.name || "Away",
-          awayLogo: awayTeam?.logo,
-          awayColor: awayTeam?.color || "#EF4444",
-          homeScore: m.homeScore ?? 0,
-          awayScore: m.awayScore ?? 0,
-          markets: m.markets || [
-            {
-              id: "1x2",
-              name: "1X2",
-              options: [
-                { id: `${m.id}-1`, label: "1", multiplier: 2.10, locked: false },
-                { id: `${m.id}-x`, label: "X", multiplier: 3.20, locked: false },
-                { id: `${m.id}-2`, label: "2", multiplier: 3.40, locked: false },
-              ],
-            },
-          ],
-        };
+    const seen = new Set<string>();
+    const seenTeams = new Set<string>();
+    const out: Array<{
+      id: string;
+      sportId: string;
+      leagueName: string;
+      period: string;
+      homeName: string;
+      homeLogo?: string;
+      homeColor: string;
+      awayName: string;
+      awayLogo?: string;
+      awayColor: string;
+      homeScore: number;
+      awayScore: number;
+      markets: any[];
+    }> = [];
+
+    for (const m of allMatches) {
+      if (m.status !== "LIVE") continue;
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+
+      const homeTeam = teamById(m.homeId);
+      const awayTeam = teamById(m.awayId);
+      const hClean = (homeTeam?.name || m.homeId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const aClean = (awayTeam?.name || m.awayId).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const pairKey = `${hClean}__vs__${aClean}`;
+      if (seenTeams.has(pairKey)) continue;
+      seenTeams.add(pairKey);
+
+      const lg = leagueById(m.leagueId)?.name || "Live Tournament";
+      out.push({
+        id: m.id,
+        sportId: m.sportId || "football",
+        leagueName: lg,
+        period: `${m.minute || 45}'`,
+        homeName: homeTeam?.name || "Home",
+        homeLogo: homeTeam?.logo,
+        homeColor: homeTeam?.color || "#3B82F6",
+        awayName: awayTeam?.name || "Away",
+        awayLogo: awayTeam?.logo,
+        awayColor: awayTeam?.color || "#EF4444",
+        homeScore: m.homeScore ?? 0,
+        awayScore: m.awayScore ?? 0,
+        markets: m.markets || [
+          {
+            id: "1x2",
+            name: "1X2",
+            options: [
+              { id: `${m.id}-1`, label: "1", multiplier: 2.10, locked: false },
+              { id: `${m.id}-x`, label: "X", multiplier: 3.20, locked: false },
+              { id: `${m.id}-2`, label: "2", multiplier: 3.40, locked: false },
+            ],
+          },
+        ],
       });
+    }
+
+    return out;
   }, [allMatches]);
+
+  const sportsList = useMemo(() => {
+    return sportsDefinitions.map((sp) => ({
+      ...sp,
+      count: storeLive.filter((m) => m.sportId === sp.id).length,
+    }));
+  }, [storeLive]);
 
   // ── Upcoming: SCHEDULED matches for Today & Tomorrow (Ghana time) ───────────
   const upcomingToday = useMemo(() =>

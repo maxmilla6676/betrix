@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import {
   ChevronLeft,
@@ -16,10 +16,12 @@ import {
   Zap,
   TrendingUp,
   Lock,
+  Radio,
 } from "lucide-react";
 import { LiveBadge } from "@/components/match/LiveMatchCard";
 import { TeamCrest } from "@/components/common/TeamCrest";
 import { useBetrix } from "@/store/betrix";
+import { dynamicTeams, dynamicLeagues } from "@/services/sportsApi";
 import { cn } from "@/lib/utils";
 import {
   formatDate,
@@ -35,29 +37,8 @@ import {
 
 export const Route = createFileRoute("/match/$matchId")({
   loader: ({ params }) => {
-    let match = matchById(params.matchId);
-    
-    // Fallback match generator if match not found directly in mock data
-    if (!match) {
-      const isLive = params.matchId.includes("live") || params.matchId.includes("1");
-      match = {
-        id: params.matchId,
-        code: `#${Math.floor(10000 + Math.random() * 89999)}`,
-        leagueId: "l1",
-        sportId: "football",
-        homeId: "t1", // Man Utd
-        awayId: "t2", // Arsenal
-        kickoff: new Date().toISOString(),
-        status: isLive ? "LIVE" : "SCHEDULED",
-        minute: isLive ? 38 : undefined,
-        homeScore: isLive ? 1 : undefined,
-        awayScore: isLive ? 0 : undefined,
-        venue: "Old Trafford, Manchester",
-        hot: true,
-        markets: [],
-      };
-    }
-    return { match };
+    const match = matchById(params.matchId);
+    return { match: match || null, matchId: params.matchId };
   },
   head: ({ loaderData }) => {
     if (!loaderData?.match) {
@@ -264,38 +245,56 @@ function generateMatchMarkets(home: Team, away: Team, seed: number): MarketItem[
 }
 
 function MatchDetailPage() {
-  const { match } = Route.useLoaderData();
+  const { match: loaderMatch, matchId } = Route.useLoaderData();
   const navigate = useNavigate();
-  const { toggleSelection, isSelected, slip } = useBetrix();
+  const { toggleSelection, isSelected, slip, allMatches } = useBetrix();
 
-  const home = teamById(match.homeId) || {
-    id: "h_fallback",
-    name: "Botafogo FC SP",
-    short: "BOT",
-    country: "Brazil",
+  const match = (allMatches.find((m) => m.id === matchId) || loaderMatch || matchById(matchId)) as Match | null;
+
+  if (!match) {
+    return (
+      <div className="min-h-screen bg-[#000000] text-white flex flex-col items-center justify-center p-6 text-center space-y-4">
+        <Radio className="w-12 h-12 text-[#F5C400] animate-pulse" />
+        <h1 className="text-xl font-extrabold">Match Not Found or Ended</h1>
+        <p className="text-sm text-gray-400 max-w-md">
+          This match is not currently live or has concluded. Please check the Live In-Play section for real-time fixtures.
+        </p>
+        <Link
+          to="/live"
+          className="inline-flex items-center px-5 py-2.5 rounded-lg bg-[#F5C400] text-black font-extrabold text-sm hover:opacity-90 transition-opacity"
+        >
+          View Live Matches
+        </Link>
+      </div>
+    );
+  }
+
+  const home = teamById(match.homeId) || dynamicTeams.get(match.homeId) || {
+    id: match.homeId,
+    name: "Home Team",
+    short: "HOM",
+    country: "International",
     leagueId: match.leagueId,
-    color: "#e11d48",
+    color: "#3B82F6",
     form: ["W", "D", "W", "L", "W"],
-    logo: "https://a.espncdn.com/i/teamlogos/soccer/500/1025.png",
   };
-  const away = teamById(match.awayId) || {
-    id: "a_fallback",
-    name: "AA Ponte Preta SP",
-    short: "PON",
-    country: "Brazil",
+  const away = teamById(match.awayId) || dynamicTeams.get(match.awayId) || {
+    id: match.awayId,
+    name: "Away Team",
+    short: "AWY",
+    country: "International",
     leagueId: match.leagueId,
-    color: "#2563eb",
-    form: ["L", "W", "D", "D", "L"],
-    logo: "https://a.espncdn.com/i/teamlogos/soccer/500/1026.png",
+    color: "#EF4444",
+    form: ["L", "W", "D", "W", "W"],
   };
 
-  const league = leagueById(match.leagueId) || {
+  const league = leagueById(match.leagueId) || dynamicLeagues.get(match.leagueId) || {
     id: match.leagueId,
-    name: "Brasileiro Serie B",
-    slug: "serie-b",
-    country: "Brazil",
-    short: "SER",
-    color: "#E5A900",
+    name: "Live Tournament",
+    slug: "tournament",
+    country: "International",
+    short: "TOU",
+    color: "#F5C400",
     sportId: "football",
     active: true,
   };
