@@ -1,4 +1,7 @@
 import type { Match, Team, League, Market, MatchStatus } from "@/data/football";
+import { isApiSportsEnabled, fetchApiSportsFixtures } from "@/services/apiSports";
+
+export { isApiSportsEnabled, fetchApiSportsFixtures } from "@/services/apiSports";
 
 export interface SportsApiSource {
   id: string;
@@ -199,6 +202,25 @@ export interface FetchResult {
 }
 
 export async function fetchLiveSportsFixtures(selectedSourceIds?: string[], targetDateStr?: string): Promise<FetchResult> {
+  // 1. If API-Sports is enabled, try fetching high-accuracy fixtures from API-Football
+  if (isApiSportsEnabled()) {
+    try {
+      const apiSportsResult = await fetchApiSportsFixtures(targetDateStr);
+      if (apiSportsResult.matches.length > 0) {
+        return {
+          matches: apiSportsResult.matches,
+          liveCount: apiSportsResult.liveCount,
+          sourcesFetched: 1,
+        };
+      }
+      if (apiSportsResult.error) {
+        console.warn("API-Sports notice:", apiSportsResult.error, "- using fallback feed.");
+      }
+    } catch (err) {
+      console.warn("API-Sports error, falling back to public feed:", err);
+    }
+  }
+
   const sourcesToFetch = selectedSourceIds && selectedSourceIds.length > 0
     ? FREE_SPORTS_SOURCES.filter((s) => selectedSourceIds.includes(s.id))
     : FREE_SPORTS_SOURCES;

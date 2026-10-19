@@ -49,6 +49,7 @@ import {
   formatGHC,
 } from "@/components/admin/DailyRevenueHistoryCard";
 import { AdminMatchManager } from "@/components/admin/AdminMatchManager";
+import { ApiSportsSettingsCard } from "@/components/admin/ApiSportsSettingsCard";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -499,6 +500,13 @@ function AdminPage() {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* TAB: SETTINGS — API Sports & Configuration */}
+          {activeTab === "settings" && (
+            <div className="space-y-4">
+              <ApiSportsSettingsCard />
             </div>
           )}
 
