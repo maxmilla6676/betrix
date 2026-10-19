@@ -576,44 +576,52 @@ function AdminPage() {
                   Active Partners ({approvedPartners.length})
                 </h4>
                 <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35] overflow-hidden">
-                  {approvedPartners.map((p) => (
-                    <div key={p.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-[#1e1e26] transition-colors">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-white">{p.name}</span>
-                          <span className="font-mono text-xs text-gray-400 bg-[#1e1e26] px-1.5 py-0.5 rounded border border-[#2a2a35]">
-                            {p.code}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Commission Rate: <strong className="text-gray-300">{p.commissionRate}%</strong>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {editingPartnerId === p.id ? (
-                          <div className="flex items-center gap-1.5">
-                            <Input type="number" min={1} max={100} value={editRateInput}
-                              onChange={(e) => setEditRateInput(Number(e.target.value))}
-                              className="w-16 h-7 text-xs bg-[#1e1e26] border-[#2a2a35] text-white" />
-                            <span className="text-xs font-bold text-gray-300">%</span>
-                            <Button size="sm" className="h-7 text-xs bg-emerald-600 text-white"
-                              onClick={() => handleSaveCommission(p.id, p.name)}>Save</Button>
+                  {approvedPartners.length === 0 ? (
+                    <div className="p-8 text-center text-xs text-gray-500 bg-[#1e1e26]">
+                      <Users2 className="h-8 w-8 mx-auto mb-2 opacity-30 text-gray-400" />
+                      <p className="font-semibold text-gray-400">No active affiliate partners</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Share the Partner Registration Link above to onboard partners.</p>
+                    </div>
+                  ) : (
+                    approvedPartners.map((p) => (
+                      <div key={p.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-[#1e1e26] transition-colors">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-white">{p.name}</span>
+                            <span className="font-mono text-xs text-gray-400 bg-[#1e1e26] px-1.5 py-0.5 rounded border border-[#2a2a35]">
+                              {p.code}
+                            </span>
                           </div>
-                        ) : (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            Commission Rate: <strong className="text-gray-300">{p.commissionRate}%</strong>
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {editingPartnerId === p.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <Input type="number" min={1} max={100} value={editRateInput}
+                                onChange={(e) => setEditRateInput(Number(e.target.value))}
+                                className="w-16 h-7 text-xs bg-[#1e1e26] border-[#2a2a35] text-white" />
+                              <span className="text-xs font-bold text-gray-300">%</span>
+                              <Button size="sm" className="h-7 text-xs bg-emerald-600 text-white"
+                                onClick={() => handleSaveCommission(p.id, p.name)}>Save</Button>
+                            </div>
+                          ) : (
+                            <Button variant="outline" size="sm"
+                              className="h-7 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white"
+                              onClick={() => { setEditingPartnerId(p.id); setEditRateInput(p.commissionRate); }}>
+                              <Edit3 className="h-3 w-3 mr-1" /> Edit Rate
+                            </Button>
+                          )}
                           <Button variant="outline" size="sm"
                             className="h-7 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white"
-                            onClick={() => { setEditingPartnerId(p.id); setEditRateInput(p.commissionRate); }}>
-                            <Edit3 className="h-3 w-3 mr-1" /> Edit Rate
+                            onClick={() => handleCopyUserLink(p.code)}>
+                            <Share2 className="h-3 w-3 mr-1" /> Copy Link
                           </Button>
-                        )}
-                        <Button variant="outline" size="sm"
-                          className="h-7 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white"
-                          onClick={() => handleCopyUserLink(p.code)}>
-                          <Share2 className="h-3 w-3 mr-1" /> Copy Link
-                        </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -685,17 +693,27 @@ function AdminPage() {
                 </div>
               </div>
               <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35] overflow-hidden">
-                {filteredUsers.map((u) => (
-                  <div key={u.id} className="p-3 flex items-center justify-between hover:bg-[#1e1e26] transition-colors text-xs">
-                    <div>
-                      <span className="font-bold text-white">{u.name}</span>
-                      <p className="text-[11px] text-gray-500">{u.email} • Joined {u.joined}</p>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] font-bold border-[#2a2a35] text-gray-400">
-                      {u.role}
-                    </Badge>
+                {filteredUsers.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-500 bg-[#1e1e26]">
+                    <Users2 className="h-8 w-8 mx-auto mb-2 opacity-30 text-gray-400" />
+                    <p className="font-semibold text-gray-400">No registered members found</p>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {q.trim() ? "No registered members match your search criteria." : "Newly registered members will appear here in real time."}
+                    </p>
                   </div>
-                ))}
+                ) : (
+                  filteredUsers.map((u) => (
+                    <div key={u.id} className="p-3 flex items-center justify-between hover:bg-[#1e1e26] transition-colors text-xs">
+                      <div>
+                        <span className="font-bold text-white">{u.name}</span>
+                        <p className="text-[11px] text-gray-500">{u.email} • Joined {u.joined}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] font-bold border-[#2a2a35] text-gray-400">
+                        {u.role}
+                      </Badge>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

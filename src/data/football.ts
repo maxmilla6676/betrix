@@ -322,64 +322,16 @@ const pairs: Pair[] = [
   ["t21", "t23", "l5", -2, "FINISHED", "Parc des Princes"],
 ];
 
-export const matches: Match[] = pairs.map(([homeId, awayId, leagueId, day, status, venue], i) => {
-  const now = Date.now();
-  const live = status === "LIVE";
-  const finished = status === "FINISHED";
-  const league = leagues.find((l) => l.id === leagueId)!;
-  const sport = sports.find((s) => s.id === league.sportId)!;
+export const matches: Match[] = [];
 
-  // For LIVE matches: kickoff = right now minus the match minute so it's always in the past
-  // For SCHEDULED/FINISHED: spread across the day using hour offsets
-  let kickoff: Date;
-  if (live) {
-    const minute = 20 + ((i * 17) % 65);
-    // Kickoff was "minute" minutes ago
-    kickoff = new Date(now - minute * 60000);
-  } else if (finished) {
-    // Finished matches: yesterday or 2 days ago
-    kickoff = new Date(base.getTime() + day * DAY + (14 + (i % 6)) * 3600000);
-  } else {
-    // SCHEDULED: spread future kickoffs across the day in 30-min slots
-    // Start from 1 hour from now and spread out
-    const slotMinutes = 60 + i * 30; // 1h, 1h30, 2h, 2h30… from midnight base
-    kickoff = new Date(base.getTime() + day * DAY + slotMinutes * 60000 + (i % 4) * 900000);
-    // If the computed kickoff is in the past for a same-day match, push to future
-    if (day === 0 && kickoff.getTime() <= now) {
-      kickoff = new Date(now + (30 + i * 15) * 60000); // push 30–3.5h into future
-    }
-  }
-
-  // Safety guard: if a match is marked LIVE but kickoff is still in the future, downgrade to SCHEDULED
-  const resolvedStatus: MatchStatus = (live && kickoff.getTime() > now) ? "SCHEDULED" : status;
-  const resolvedLive = resolvedStatus === "LIVE";
-
-  return {
-    id: `m${i + 1}`,
-    leagueId,
-    sportId: league.sportId,
-    homeId,
-    awayId,
-    kickoff: kickoff.toISOString(),
-    status: resolvedStatus,
-    minute: resolvedLive ? (20 + ((i * 17) % 65)) : undefined,
-    homeScore: resolvedLive || finished ? (i * 3) % 4 : undefined,
-    awayScore: resolvedLive || finished ? (i * 5) % 3 : undefined,
-    venue,
-    hot: i % 3 === 0,
-    markets: markets(i + 1, sport.draw),
-  };
-});
-
-
-export const matchById = (id: string) => dynamicMatchesMap.get(id) || matches.find((m) => m.id === id);
-export const liveMatches = () => matches.filter((m) => m.status === "LIVE");
+export const matchById = (id: string) => dynamicMatchesMap.get(id);
+export const liveMatches = () => Array.from(dynamicMatchesMap.values()).filter((m) => m.status === "LIVE");
 export const upcomingMatches = () =>
-  matches
+  Array.from(dynamicMatchesMap.values())
     .filter((m) => m.status === "SCHEDULED")
     .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
-export const finishedMatches = () => matches.filter((m) => m.status === "FINISHED");
-export const matchesBySport = (sportId: string) => matches.filter((m) => m.sportId === sportId);
+export const finishedMatches = () => Array.from(dynamicMatchesMap.values()).filter((m) => m.status === "FINISHED");
+export const matchesBySport = (sportId: string) => Array.from(dynamicMatchesMap.values()).filter((m) => m.sportId === sportId);
 
 export function standingsFor(leagueId: string) {
   return teams

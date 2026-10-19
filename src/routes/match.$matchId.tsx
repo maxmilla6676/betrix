@@ -319,12 +319,15 @@ function MatchDetailPage() {
   // Favorite markets set: marketId -> boolean
   const [starredMarkets, setStarredMarkets] = useState<Record<string, boolean>>({});
 
-  // Chat message state
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; user: string; text: string; time: string }>>([
-    { id: "1", user: "BetKing_99", text: "Botafogo is looking solid tonight! 🚀", time: "22:15" },
-    { id: "2", user: "PunterPro", text: "Over 1.5 early goals looks like easy money", time: "22:18" },
-    { id: "3", user: "Staker_GH", text: "Ponte Preta form is weak away from home", time: "22:24" },
-  ]);
+  // Chat message state (real-time match discussion persisted per match)
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; user: string; text: string; time: string }>>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem(`betrix_chat_${match.id}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
   const [newMsg, setNewMsg] = useState("");
 
   const toggleCollapse = (marketId: string) => {
@@ -339,15 +342,19 @@ function MatchDetailPage() {
   const handleSendChat = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMsg.trim()) return;
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: String(Date.now()),
-        user: "You",
-        text: newMsg.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
+    const item = {
+      id: String(Date.now()),
+      user: "You",
+      text: newMsg.trim(),
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setChatMessages((prev) => {
+      const next = [...prev, item];
+      try {
+        localStorage.setItem(`betrix_chat_${match.id}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
     setNewMsg("");
   };
 
@@ -727,15 +734,23 @@ function MatchDetailPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-2 py-3 pr-1">
-              {chatMessages.map((msg) => (
-                <div key={msg.id} className="rounded-lg bg-[#1e1e26] p-2.5 space-y-0.5">
-                  <div className="flex items-center justify-between text-[10px] text-gray-400">
-                    <span className="font-bold text-[#F5C400]">{msg.user}</span>
-                    <span>{msg.time}</span>
-                  </div>
-                  <p className="text-xs text-gray-100">{msg.text}</p>
+              {chatMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-500">
+                  <MessageSquare className="h-8 w-8 mb-2 opacity-30 text-[#F5C400]" />
+                  <p className="text-xs font-semibold text-gray-400">No chat messages yet</p>
+                  <p className="text-[11px] text-gray-500 mt-1">Be the first to share your live prediction and match thoughts below.</p>
                 </div>
-              ))}
+              ) : (
+                chatMessages.map((msg) => (
+                  <div key={msg.id} className="rounded-lg bg-[#1e1e26] p-2.5 space-y-0.5">
+                    <div className="flex items-center justify-between text-[10px] text-gray-400">
+                      <span className="font-bold text-[#F5C400]">{msg.user}</span>
+                      <span>{msg.time}</span>
+                    </div>
+                    <p className="text-xs text-gray-100">{msg.text}</p>
+                  </div>
+                ))
+              )}
             </div>
 
             <form onSubmit={handleSendChat} className="flex gap-2 pt-2 border-t border-[#25252c]">

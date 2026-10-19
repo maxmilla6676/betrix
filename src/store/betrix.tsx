@@ -153,95 +153,10 @@ interface BetrixState {
 const Ctx = createContext<BetrixState | null>(null);
 const STORAGE_KEY = "betrix.state.v7";
 
-const seedNotifications: AppNotification[] = [
-  { id: "n1", title: "Prediction result available", body: "Slip BTX-4M18T settled — 3 of 4 correct.", time: "12m ago", read: false, kind: "result" },
-  { id: "n2", title: "Match starting soon", body: "Manchester City vs Tottenham kicks off in 30 minutes.", time: "48m ago", read: false, kind: "match" },
-  { id: "n3", title: "Prediction code loaded", body: "You loaded code BTX-7K29Q with 3 selections.", time: "2h ago", read: true, kind: "code" },
-  { id: "n4", title: "New platform announcement", body: "Champions League markets are now live on BETRIX.", time: "1d ago", read: true, kind: "system" },
-];
+const seedNotifications: AppNotification[] = [];
 
 function seedHistory(): HistoryEntry[] {
-  const mk = (
-    id: string,
-    marketId: string,
-    marketName: string,
-    optionId: string,
-    optionLabel: string,
-    mult: number,
-    matchTitle?: string,
-    kickoffTime?: string
-  ): Selection => ({
-    matchId: id,
-    marketId,
-    marketName,
-    optionId,
-    optionLabel,
-    multiplier: mult,
-    matchTitle,
-    kickoffTime,
-  });
-
-  return [
-    {
-      code: "BTX-ACC4",
-      createdAt: new Date().toISOString(),
-      stake: 10.00,
-      potWin: 55.66,
-      status: "PENDING",
-      payout: 0,
-      isLive: true,
-      matchTitle: "Panathinaikos vs Asteras Tripolis",
-      cashoutAvailable: true,
-      cashoutValue: 10.00,
-      selections: [
-        mk("m-pana", "1x2-2up", "1X2 - 2UP", "home", "Home", 1.23, "Panathinaikos vs Asteras Tripolis", "18/10 14:30"),
-        mk("m-lorient", "ou", "Monaco Over/Under", "o05", "Over 0.5", 1.23, "Lorient vs Monaco", "18/10 15:15"),
-        mk("m-nott", "1x2-2up", "1X2 - 2UP", "away", "Away", 1.60, "Nottingham Forest vs Arsenal", "18/10 15:30"),
-      ],
-    },
-    {
-      code: "BTX-UD14",
-      createdAt: new Date(Date.now() - 300000).toISOString(),
-      stake: 14.00,
-      potWin: 42.80,
-      status: "PENDING",
-      payout: 0,
-      isLive: true,
-      matchTitle: "Udinese vs Lecce",
-      cashoutAvailable: false,
-      cashoutValue: 23.00,
-      selections: [
-        mk("m-udi", "1x2", "Match Result", "home", "Home", 1.85, "Udinese vs Lecce", "18/10 13:30"),
-        mk("m-emp", "ou", "Total Goals", "o15", "Over 1.5", 1.35, "Empoli vs Monza", "18/10 16:00"),
-      ],
-    },
-    {
-      code: "BTX-UD10",
-      createdAt: new Date(Date.now() - 900000).toISOString(),
-      stake: 10.00,
-      potWin: 38.50,
-      status: "PENDING",
-      payout: 0,
-      isLive: true,
-      matchTitle: "Udinese vs Lecce",
-      cashoutAvailable: false,
-      cashoutValue: 16.50,
-      selections: [
-        mk("m-udi2", "1x2", "Match Result", "draw", "Draw", 3.20, "Udinese vs Lecce", "18/10 13:30"),
-        mk("m-rom", "btts", "Both Teams To Score", "yes", "Yes", 1.70, "Roma vs Inter", "18/10 18:45"),
-      ],
-    },
-    {
-      code: "BTX-4M18T",
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      stake: 50,
-      potWin: 184,
-      status: "WON",
-      payout: 184,
-      matchTitle: "Aston Villa vs Man City",
-      selections: [mk("m19", "1x2", "Match Result", "home", "Home", 2.1, "Aston Villa vs Man City", "17/10 16:30")],
-    },
-  ];
+  return [];
 }
 
 export function makeCode() {
@@ -252,15 +167,15 @@ export function makeCode() {
 }
 
 export function BetrixProvider({ children }: { children: ReactNode }) {
-  const [balance, setBalance] = useState(20.53); // Exact match to user reference screenshot
-  const [phone, setPhone] = useState("0205795789");
-  const [partnersList, setPartnersList] = useState<PartnerRecord[]>(seedPartners);
-  const [partnerDeposits, setPartnerDeposits] = useState<PartnerDepositRecord[]>(seedPartnerDeposits);
+  const [balance, setBalance] = useState(0.00);
+  const [phone, setPhone] = useState("");
+  const [partnersList, setPartnersList] = useState<PartnerRecord[]>([]);
+  const [partnerDeposits, setPartnerDeposits] = useState<PartnerDepositRecord[]>([]);
   const [referredByPartner, setReferredByPartner] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
   const [slip, setSlip] = useState<Selection[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>(seedHistory);
-  const [notifications, setNotifications] = useState<AppNotification[]>(seedNotifications);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
 
   // Admin Match & League Management
@@ -334,37 +249,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Revenue & Stat overrides to match exact reference screenshot (GH₵214,600 Total, 8 Partners, 4198 Members, 616 Analyses, 6 Pending)
-  const [totalRevenueOverride, setTotalRevenueOverride] = useState<number | null>(214600);
-  const [partnersCountOverride, setPartnersCountOverride] = useState<number | null>(8);
-  const [membersCountOverride, setMembersCountOverride] = useState<number | null>(4198);
-  const [analysesCountOverride, setAnalysesCountOverride] = useState<number | null>(616);
-  const [pendingCountOverride, setPendingCountOverride] = useState<number | null>(6);
+  // Revenue & Stat overrides (null by default to use real live data)
+  const [totalRevenueOverride, setTotalRevenueOverride] = useState<number | null>(null);
+  const [partnersCountOverride, setPartnersCountOverride] = useState<number | null>(null);
+  const [membersCountOverride, setMembersCountOverride] = useState<number | null>(null);
+  const [analysesCountOverride, setAnalysesCountOverride] = useState<number | null>(null);
+  const [pendingCountOverride, setPendingCountOverride] = useState<number | null>(null);
 
   // Daily revenue ledger mapping dateStr (YYYY-MM-DD) to DailyRevenueEntry
-  const [dailyRevenueLedger, setDailyRevenueLedger] = useState<Record<string, DailyRevenueEntry>>(() => {
-    const map: Record<string, DailyRevenueEntry> = {};
-    const now = new Date();
-    // Default screenshot historical values:
-    // WE 14 Oct: GH₵1,950
-    // TH 15 Oct: GH₵5,100
-    // FR 16 Oct: GH₵2,850
-    // SA 17 Oct: GH₵0
-    // TODAY 18 Oct: GH₵0
-    const offsets = [
-      { offset: 4, rev: 1950, count: 5 },
-      { offset: 3, rev: 5100, count: 12 },
-      { offset: 2, rev: 2850, count: 7 },
-      { offset: 1, rev: 0, count: 0 },
-      { offset: 0, rev: 0, count: 0 },
-    ];
-    offsets.forEach(({ offset, rev, count }) => {
-      const d = new Date(now.getTime() - offset * 86400000);
-      const iso = d.toISOString().slice(0, 10);
-      map[iso] = { date: iso, totalRevenue: rev, transactionsCount: count };
-    });
-    return map;
-  });
+  const [dailyRevenueLedger, setDailyRevenueLedger] = useState<Record<string, DailyRevenueEntry>>({});
 
   useEffect(() => {
     try {
@@ -643,13 +536,17 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const totalRevenue = totalRevenueOverride !== null
     ? totalRevenueOverride
     : Object.values(dailyRevenueLedger).reduce((acc, cur) => acc + cur.totalRevenue, 0);
-  const devCommission = Number((todayRevenue * 0.30).toFixed(2));
+  const devCommission = Number((todayRevenue * 0.20).toFixed(2));
 
   const totalPartnersCount = partnersCountOverride !== null
     ? partnersCountOverride
     : partnersList.filter((p) => p.status === "APPROVED").length;
-  const totalUsersCount = membersCountOverride !== null ? membersCountOverride : 4198;
-  const activeAnalysesCount = analysesCountOverride !== null ? analysesCountOverride : 616;
+  const totalUsersCount = membersCountOverride !== null
+    ? membersCountOverride
+    : partnersList.reduce((acc, p) => acc + (p.activeUsers || 0), 0) + (isLoggedIn ? 1 : 0);
+  const activeAnalysesCount = analysesCountOverride !== null
+    ? analysesCountOverride
+    : history.filter((h) => h.status === "PENDING").length;
   const pendingPaymentsCount = pendingCountOverride !== null
     ? pendingCountOverride
     : partnersList.filter((p) => p.status === "PENDING").length;
@@ -926,6 +823,19 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         },
         ...prev,
       ]);
+
+      const today = new Date().toISOString().slice(0, 10);
+      setDailyRevenueLedger((prev) => {
+        const cur = prev[today] || { date: today, totalRevenue: 0, transactionsCount: 0 };
+        return {
+          ...prev,
+          [today]: {
+            date: today,
+            totalRevenue: cur.totalRevenue + amount,
+            transactionsCount: cur.transactionsCount + 1,
+          },
+        };
+      });
 
       // If user signed up or is tied to a partner referral link, credit the partner!
       if (referredByPartner) {
