@@ -820,6 +820,7 @@ function CorrectScoreMarketCard({
   awayName,
   starred,
   isCollapsed,
+  isMatchFinished = false,
   onToggleCollapse,
   onStarToggle,
   isSelected,
@@ -830,6 +831,7 @@ function CorrectScoreMarketCard({
   awayName: string;
   starred?: boolean;
   isCollapsed?: boolean;
+  isMatchFinished?: boolean;
   onToggleCollapse: () => void;
   onStarToggle: (e: React.MouseEvent) => void;
   isSelected: (mId: string, mktId: string, optId: string) => boolean;
