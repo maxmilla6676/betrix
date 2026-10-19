@@ -3,7 +3,7 @@ import { Lock } from "lucide-react";
 import { LeagueBadge, TeamCrest } from "@/components/common/TeamCrest";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
-import { formatKickoff, leagueById, teamById, type Match } from "@/data/football";
+import { formatKickoff, leagueById, teamById, isMatchLocked, type Match } from "@/data/football";
 
 export function MatchCard({ match, compact = false }: { match: Match; compact?: boolean }) {
   const { toggleSelection, isSelected } = useBetrix();
@@ -11,7 +11,7 @@ export function MatchCard({ match, compact = false }: { match: Match; compact?: 
   const away = teamById(match.awayId);
   const league = leagueById(match.leagueId);
   const market = match.markets.find((m) => m.id === "1x2")!;
-  const disabled = market.status !== "ACTIVE" || match.status !== "SCHEDULED";
+  const disabled = market.status !== "ACTIVE" || isMatchLocked(match);
 
   return (
     <article className="bg-white border border-gray-200 rounded-2xl p-3.5 transition-all hover:border-red-200 hover:shadow-md sm:p-4 shadow-sm">

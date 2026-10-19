@@ -10,7 +10,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { useBetrix, type Selection } from "@/store/betrix";
-import { teamById, leagueById, dayBucket, type Match } from "@/data/football";
+import { teamById, leagueById, dayBucket, isMatchLocked, type Match } from "@/data/football";
 import { cn } from "@/lib/utils";
 import { formatTimeGhana, formatClockGhana, GHANA_TZ } from "@/lib/ghana-time";
 
@@ -413,7 +413,8 @@ function LivePage() {
                                 );
                               }
 
-                              const isLocked = opt.locked || opt.multiplier <= 0;
+                              // Live in-play matches have started — odds are locked until the game ends
+                              const isLocked = true;
                               const selectionPayload: Selection = {
                                 matchId: m.id,
                                 marketId: market1X2?.id || "1x2",
@@ -429,21 +430,21 @@ function LivePage() {
                                 <button
                                   key={opt.id || optIdx}
                                   disabled={isLocked}
-                                  onClick={() => toggleSelection(selectionPayload)}
+                                  title="Odds are locked while match is in-play"
+                                  onClick={() => {
+                                    toast.error("This match has kicked off. Odds are locked until the game ends.");
+                                  }}
                                   className={cn(
-                                    "h-12 rounded-lg flex items-center justify-center font-mono font-bold text-xs transition-all border",
+                                    "h-12 rounded-lg flex flex-col items-center justify-center font-mono font-bold text-xs transition-all border",
                                     isLocked
-                                      ? "bg-[#111520] border-[#1a2030] text-gray-600 cursor-not-allowed"
+                                      ? "bg-[#111520] border-[#1a2030] text-gray-600 cursor-not-allowed opacity-75"
                                       : active
                                       ? "bg-[#F5C400] border-[#F5C400] text-black shadow-md shadow-[#F5C400]/20 font-black scale-95"
                                       : "bg-[#121622] border-[#1f283d] text-white hover:border-[#F5C400]/50 hover:bg-[#182030]"
                                   )}
                                 >
-                                  {isLocked ? (
-                                    <Lock className="w-3.5 h-3.5 text-gray-500" />
-                                  ) : (
-                                    opt.multiplier.toFixed(2)
-                                  )}
+                                  <Lock className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="text-[8px] font-black uppercase tracking-tight text-gray-500 mt-0.5">Locked</span>
                                 </button>
                               );
                             })}
@@ -524,25 +525,28 @@ function LivePage() {
                             const opt = opts[i];
                             if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
                             const active = isSelected(m.id, market?.id || "1x2", opt.id);
-                            const isFinished = m.status === "FINISHED";
+                            const isLocked = isMatchLocked(m);
                             return (
                               <button
                                 key={opt.id}
-                                disabled={isFinished}
+                                disabled={isLocked}
                                 onClick={() => {
-                                  if (isFinished) return;
+                                  if (isLocked) {
+                                    toast.error(m.status === "FINISHED" ? "This match has ended. Odds are locked." : "This match has kicked off. Odds are locked until the game ends.");
+                                    return;
+                                  }
                                   toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier });
                                 }}
                                 className={cn(
                                   "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
-                                  isFinished
+                                  isLocked
                                     ? "bg-[#0b0e14] border-[#141824] text-gray-600 cursor-not-allowed opacity-50"
                                     : active
                                     ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
                                     : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
                                 )}
                               >
-                                {isFinished ? (
+                                {isLocked ? (
                                   <Lock className="w-3 h-3 text-gray-500" />
                                 ) : (
                                   <>
@@ -601,25 +605,28 @@ function LivePage() {
                             const opt = opts[i];
                             if (!opt) return <div key={i} className="h-10 bg-[#0d1220] rounded border border-[#141824] opacity-30" />;
                             const active = isSelected(m.id, market?.id || "1x2", opt.id);
-                            const isFinished = m.status === "FINISHED";
+                            const isLocked = isMatchLocked(m);
                             return (
                               <button
                                 key={opt.id}
-                                disabled={isFinished}
+                                disabled={isLocked}
                                 onClick={() => {
-                                  if (isFinished) return;
+                                  if (isLocked) {
+                                    toast.error(m.status === "FINISHED" ? "This match has ended. Odds are locked." : "This match has kicked off. Odds are locked until the game ends.");
+                                    return;
+                                  }
                                   toggleSelection({ matchId: m.id, marketId: market?.id || "1x2", marketName: market?.name || "1X2", optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier });
                                 }}
                                 className={cn(
                                   "h-10 rounded flex flex-col items-center justify-center font-mono text-[11px] font-bold border transition-all",
-                                  isFinished
+                                  isLocked
                                     ? "bg-[#0b0e14] border-[#141824] text-gray-600 cursor-not-allowed opacity-50"
                                     : active
                                     ? "bg-[#F5C400] border-[#F5C400] text-black font-black"
                                     : "bg-[#111520] border-[#1b2030] text-white hover:border-[#F5C400]/40"
                                 )}
                               >
-                                {isFinished ? (
+                                {isLocked ? (
                                   <Lock className="w-3 h-3 text-gray-500" />
                                 ) : (
                                   <>

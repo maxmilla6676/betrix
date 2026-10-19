@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Lock, Flame } from "lucide-react";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
-import { formatKickoff, leagueById, teamById, type Match } from "@/data/football";
+import { formatKickoff, leagueById, teamById, isMatchLocked, type Match } from "@/data/football";
 
 /** Dense sportsbook-style row: teams on the left, odds buttons on the right. */
 export function OddsRow({ match, marketId = "1x2" }: { match: Match; marketId?: string }) {
@@ -11,7 +11,7 @@ export function OddsRow({ match, marketId = "1x2" }: { match: Match; marketId?: 
   const away = teamById(match.awayId);
   const league = leagueById(match.leagueId);
   const market = match.markets.find((m) => m.id === marketId) ?? match.markets[0]!;
-  const disabled = market.status !== "ACTIVE" || match.status === "FINISHED";
+  const disabled = market.status !== "ACTIVE" || isMatchLocked(match);
   const extra = match.markets.length * 6 + 4;
   const live = match.status === "LIVE";
 

@@ -325,10 +325,29 @@ const pairs: Pair[] = [
 export const matches: Match[] = [];
 
 export const matchById = (id: string) => dynamicMatchesMap.get(id);
+
+/** Returns true if a match has started (LIVE), is finished, or kickoff time has passed */
+export function isMatchLocked(match?: Match | null): boolean {
+  if (!match) return false;
+  if (match.status === "LIVE" || match.status === "FINISHED" || match.status === "POSTPONED" || match.status === "CANCELLED") {
+    return true;
+  }
+  if (match.minute !== undefined && match.minute > 0) {
+    return true;
+  }
+  if (match.kickoff) {
+    const kickoffMs = new Date(match.kickoff).getTime();
+    if (!isNaN(kickoffMs) && kickoffMs <= Date.now()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export const liveMatches = () => Array.from(dynamicMatchesMap.values()).filter((m) => m.status === "LIVE");
 export const upcomingMatches = () =>
   Array.from(dynamicMatchesMap.values())
-    .filter((m) => m.status === "SCHEDULED")
+    .filter((m) => m.status === "SCHEDULED" && !isMatchLocked(m))
     .sort((a, b) => a.kickoff.localeCompare(b.kickoff));
 export const finishedMatches = () => Array.from(dynamicMatchesMap.values()).filter((m) => m.status === "FINISHED");
 export const matchesBySport = (sportId: string) => Array.from(dynamicMatchesMap.values()).filter((m) => m.sportId === sportId);

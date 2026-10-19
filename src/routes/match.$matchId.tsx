@@ -27,6 +27,7 @@ import {
   leagueById,
   matchById,
   teamById,
+  isMatchLocked,
   type Match,
   type Team,
   type League,
@@ -474,12 +475,17 @@ function MatchDetailPage() {
             </span>
           </div>
 
-          {match.status === "FINISHED" && (
-            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">
-              <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+          {match.status === "FINISHED" ? (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gray-600/30 bg-gray-600/10 px-3 py-2 text-xs font-bold text-gray-300">
+              <Lock className="h-4 w-4 shrink-0 text-gray-400" />
               <span>This match has finished. All betting markets and odds are locked.</span>
             </div>
-          )}
+          ) : isMatchLocked(match) ? (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">
+              <Lock className="h-4 w-4 shrink-0 text-amber-400" />
+              <span>This match has kicked off. All betting markets and odds are locked until the game ends.</span>
+            </div>
+          ) : null}
         </div>
 
         {/* Main Segmented Tabs: Markets | Stats | Chat */}
@@ -581,6 +587,7 @@ function MatchDetailPage() {
                   const isCollapsed = collapsedMarkets[market.id];
                   const isStarred = starredMarkets[market.id];
 
+                  const isLocked = isMatchLocked(match);
                   const isMatchFinished = match.status === "FINISHED";
                   if (market.id === "m_correct_score") {
                     return (
@@ -591,7 +598,7 @@ function MatchDetailPage() {
                         awayName={away.name}
                         starred={isStarred}
                         isCollapsed={isCollapsed}
-                        isMatchFinished={isMatchFinished}
+                        isMatchFinished={isLocked}
                         onToggleCollapse={() => toggleCollapse(market.id)}
                         onStarToggle={(e) => toggleStar(market.id, e)}
                         isSelected={isSelected}
@@ -617,9 +624,15 @@ function MatchDetailPage() {
                             <ChevronUp className="h-4 w-4 text-[#F5C400] shrink-0" />
                           )}
                           <span className="truncate text-xs font-extrabold tracking-tight">{market.name}</span>
-                          {isMatchFinished ? (
-                            <span className="inline-flex items-center gap-1 rounded bg-gray-800 px-1.5 py-0.5 text-[9px] font-bold text-gray-400">
-                              <Lock className="h-2.5 w-2.5" /> Locked
+                          {isMatchLocked ? (
+                            <span className={cn(
+                              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold",
+                              isMatchFinished
+                                ? "bg-gray-800 text-gray-400"
+                                : "bg-orange-900/60 text-orange-400"
+                            )}>
+                              <Lock className="h-2.5 w-2.5" />
+                              {isMatchFinished ? "Locked" : "In-Play — Locked"}
                             </span>
                           ) : market.info ? (
                             <Info className="h-3 w-3 text-gray-500 hover:text-gray-300 shrink-0" title={market.info} />
@@ -651,9 +664,16 @@ function MatchDetailPage() {
                                 <button
                                   key={opt.id}
                                   type="button"
-                                  disabled={isMatchFinished}
+                                  disabled={isLocked}
                                   onClick={() => {
-                                    if (isMatchFinished) return;
+                                    if (isLocked) {
+                                      toast.error(
+                                        match.status === "FINISHED"
+                                          ? "This match has finished. Odds are locked."
+                                          : "This match has already kicked off. Odds are locked until the game ends."
+                                      );
+                                      return;
+                                    }
                                     toggleSelection({
                                       matchId: match.id,
                                       marketId: market.id,
@@ -665,7 +685,7 @@ function MatchDetailPage() {
                                   }}
                                   className={cn(
                                     "group relative flex flex-col justify-between rounded-lg border p-2.5 text-left transition-all duration-150",
-                                    isMatchFinished
+                                    isLocked
                                       ? "border-[#202028] bg-[#141418] opacity-60 cursor-not-allowed"
                                       : active
                                       ? "border-[#F5C400] bg-[#292200] shadow-[0_0_12px_rgba(245,196,0,0.25)] active:scale-[0.97]"
@@ -679,9 +699,13 @@ function MatchDetailPage() {
 
                                   {/* Multiplier / Odds value at bottom right */}
                                   <div className="mt-1 flex items-center justify-end">
-                                    {isMatchFinished ? (
-                                      <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500">
-                                        <Lock className="h-3 w-3" /> Locked
+                                    {isLocked ? (
+                                      <span className={cn(
+                                        "inline-flex items-center gap-1 text-xs font-bold",
+                                        isMatchFinished ? "text-gray-500" : "text-orange-500/70"
+                                      )}>
+                                        <Lock className="h-3 w-3" />
+                                        {isMatchFinished ? "FT" : "Live"}
                                       </span>
                                     ) : (
                                       <span

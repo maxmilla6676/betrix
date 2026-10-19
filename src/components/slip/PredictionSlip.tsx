@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, type HistoryEntry, type Selection } from "@/store/betrix";
-import { matchById, teamById, matches as seedMatches } from "@/data/football";
+import { matchById, teamById, isMatchLocked, matches as seedMatches } from "@/data/football";
 import { cn } from "@/lib/utils";
 
 function generateBookingCode(length = 6) {
@@ -309,7 +309,10 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
     confirmSlip,
     balance,
     toggleSelection,
+    allMatches,
   } = useBetrix();
+
+  const getMatch = (id: string) => allMatches.find((m) => m.id === id) || matchById(id);
 
   const [betType, setBetType] = useState<"Single" | "Multiple" | "System">("Single");
   const [itemStakes, setItemStakes] = useState<Record<string, number>>({});
@@ -549,7 +552,8 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
             </div>
           ) : (
             slip.map((s) => {
-              const match = matchById(s.matchId);
+              const match = getMatch(s.matchId);
+              const isLocked = isMatchLocked(match);
               const isFinished = match?.status === "FINISHED";
               const home = match ? teamById(match.homeId)?.name : "Home";
               const away = match ? teamById(match.awayId)?.name : "Away";
@@ -561,7 +565,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
                   key={key}
                   className={cn(
                     "border rounded-xl p-3 space-y-2 relative group transition-colors",
-                    isFinished
+                    isLocked
                       ? "bg-[#141214] border-red-900/40"
                       : "bg-[#12141c] border-[#1e2230] hover:border-[#F5C400]/40"
                   )}
@@ -575,9 +579,10 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
                         {s.marketName}:{" "}
                         <span className="font-bold text-[#F5C400]">{s.optionLabel}</span>
                       </p>
-                      {isFinished && (
+                      {isLocked && (
                         <span className="inline-flex items-center gap-1 mt-1 rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-bold text-red-400 border border-red-500/25">
-                          <Lock className="h-2.5 w-2.5" /> Match Ended — Odds Locked
+                          <Lock className="h-2.5 w-2.5" />
+                          {isFinished ? "Match Ended — Odds Locked" : "Match Started — Odds Locked"}
                         </span>
                       )}
                     </div>
@@ -672,10 +677,10 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
             </div>
 
             {/* Locked matches warning */}
-            {slip.some((s) => matchById(s.matchId)?.status === "FINISHED") && (
+            {slip.some((s) => isMatchLocked(getMatch(s.matchId))) && (
               <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl p-2.5 text-xs font-bold text-center flex items-center justify-center gap-1.5">
                 <Lock className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                <span>One or more matches have ended. Odds are locked — please remove them to place bet.</span>
+                <span>One or more matches have started or ended. Odds are locked — remove them to place bet.</span>
               </div>
             )}
 
@@ -705,7 +710,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
                 disabled={
                   totalStake <= 0 ||
                   isInsufficient ||
-                  slip.some((s) => matchById(s.matchId)?.status === "FINISHED")
+                  slip.some((s) => isMatchLocked(getMatch(s.matchId)))
                 }
                 onClick={() => setConfirmed(confirmSlip(totalStake))}
                 className="flex items-center justify-center h-12 rounded-xl bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs uppercase tracking-wider shadow-md transition-all disabled:opacity-50 active:scale-95"

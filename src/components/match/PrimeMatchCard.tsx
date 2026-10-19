@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Lock, TrendingUp } from "lucide-react";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
-import { formatKickoff, leagueById, teamById, type Match } from "@/data/football";
+import { formatKickoff, leagueById, teamById, isMatchLocked, type Match } from "@/data/football";
 
 export function PrimeMatchCard({ match }: { match: Match }) {
   const { toggleSelection, isSelected } = useBetrix();
@@ -10,7 +10,7 @@ export function PrimeMatchCard({ match }: { match: Match }) {
   const away = teamById(match.awayId);
   const league = leagueById(match.leagueId);
   const market = match.markets.find((m) => m.id === "1x2") ?? match.markets[0]!;
-  const disabled = market.status !== "ACTIVE" || match.status === "FINISHED";
+  const disabled = market.status !== "ACTIVE" || isMatchLocked(match);
 
   const matchCode = match.code || `#${70000 + (parseInt(match.id.replace(/\D/g, "") || "1") * 17) % 29000}`;
   const extraCount = match.markets.length * 5 + (parseInt(match.id.replace(/\D/g, "") || "1") % 10);

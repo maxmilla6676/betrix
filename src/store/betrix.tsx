@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { matchById, matches as seedMatches, type Match } from "@/data/football";
+import { matchById, isMatchLocked, matches as seedMatches, type Match } from "@/data/football";
 import { fetchLiveSportsFixtures } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import {
 } from "@/data/adminMatches";
 
 export type { AdminLeague, AdminMatch };
+export { isMatchLocked };
 
 export interface Selection {
   matchId: string;
@@ -124,6 +125,7 @@ interface BetrixState {
   clearSlip: () => void;
   loadSlip: (selections: Selection[]) => void;
   confirmSlip: (stake: number) => HistoryEntry;
+  settleBet: (code: string, outcome?: "WON" | "LOST") => void;
   markAllRead: () => void;
   markRead: (id: string) => void;
   totalMultiplier: number;
@@ -248,6 +250,51 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     }, 15000);
     return () => clearInterval(timer);
   }, []);
+
+  // Sports API State Logic
+  const [apiMatches, setApiMatches] = useState<Match[]>([]);
+  const [isApiLoading, setIsApiLoading] = useState<boolean>(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [lastApiUpdate, setLastApiUpdate] = useState<string | null>(null);
+  const [apiLiveCount, setApiLiveCount] = useState<number>(0);
+  const [apiSourcesFetched, setApiSourcesFetched] = useState<number>(0);
+  const [enableLiveApi, setEnableLiveApi] = useState<boolean>(true);
+
+  const fetchApiMatches = useCallback(async () => {
+    if (!enableLiveApi) return;
+    setIsApiLoading(true);
+    setApiError(null);
+    try {
+      const todayParam = espnDateParam(0);
+      const res = await fetchLiveSportsFixtures(undefined, todayParam);
+      setApiMatches(res.matches);
+      setApiLiveCount(res.liveCount);
+      setApiSourcesFetched(res.sourcesFetched);
+      setLastApiUpdate(formatClockGhana(new Date()));
+    } catch (e: any) {
+      setApiError(e?.message || "Failed to load live sports fixtures");
+    } finally {
+      setIsApiLoading(false);
+    }
+  }, [enableLiveApi]);
+
+  useEffect(() => {
+    fetchApiMatches();
+    const interval = setInterval(() => {
+      fetchApiMatches();
+    }, 25000);
+    return () => clearInterval(interval);
+  }, [fetchApiMatches]);
+
+  const allMatches = useMemo(() => {
+    const convertedAdmin = adminMatches.map((am) =>
+      convertAdminMatchToMatch(am, adminLeagues)
+    );
+    const adminIds = new Set(convertedAdmin.map((m) => m.id));
+    const nonAdminApi = apiMatches.filter((m) => !adminIds.has(m.id));
+
+    return [...convertedAdmin, ...nonAdminApi];
+  }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
   // Revenue & Stat overrides (null by default to use real live data)
   const [totalRevenueOverride, setTotalRevenueOverride] = useState<number | null>(null);
@@ -725,10 +772,14 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => setIsLoggedIn(false), []);
 
   const toggleSelection = useCallback((s: Selection) => {
-    // Check if match has finished
-    const targetMatch = matchById(s.matchId);
-    if (targetMatch && targetMatch.status === "FINISHED") {
-      toast.error("This match has finished. Odds are locked and betting is closed.");
+    // Check if match has started or finished — lock betting
+    const targetMatch = allMatches.find((m) => m.id === s.matchId) || matchById(s.matchId);
+    if (targetMatch && isMatchLocked(targetMatch)) {
+      if (targetMatch.status === "FINISHED") {
+        toast.error("This match has finished. Odds are locked and betting is closed.");
+      } else {
+        toast.error("This match has already kicked off. Odds are locked until the game ends.");
+      }
       return;
     }
 
@@ -742,7 +793,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       }
       return [...prev, s];
     });
-  }, []);
+  }, [allMatches]);
 
   const isSelected = useCallback(
     (matchId: string, marketId: string, optionId: string) =>
@@ -764,16 +815,22 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
   const confirmSlip = useCallback(
     (stake: number) => {
-      // Validate that no finished matches are in the slip
-      const finishedSelection = slip.find((s) => {
-        const m = matchById(s.matchId);
-        return m && m.status === "FINISHED";
+      // Validate that no started or finished matches are in the slip
+      const lockedSelection = slip.find((s) => {
+        const m = allMatches.find((x) => x.id === s.matchId) || matchById(s.matchId);
+        return isMatchLocked(m);
       });
-      if (finishedSelection) {
-        toast.error("Cannot place bet: One or more matches in your slip have finished and odds are locked.");
-        throw new Error("Match has finished");
+      if (lockedSelection) {
+        const m = allMatches.find((x) => x.id === lockedSelection.matchId) || matchById(lockedSelection.matchId);
+        if (m?.status === "FINISHED") {
+          toast.error("Cannot place bet: One or more matches in your slip have finished and odds are locked.");
+        } else {
+          toast.error("Cannot place bet: One or more matches have already started. Odds are locked until the game ends.");
+        }
+        throw new Error("Match is locked");
       }
 
+      const potWin = Number((stake * totalMultiplier).toFixed(2));
       const entry: HistoryEntry = {
         code: makeCode(),
         createdAt: new Date().toISOString(),
@@ -781,9 +838,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         selections: slip,
         status: "PENDING",
         payout: 0,
+        potWin,
+        matchTitle: slip.length === 1 ? (slip[0]?.matchTitle || "Single Match") : `${slip.length} Selections Accumulator`,
       };
       setHistory((h) => [entry, ...h]);
-      setBalance((p) => Math.max(0, p - stake));
+      setBalance((p) => Math.max(0, Number((p - stake).toFixed(2))));
       setTransactions((t) => [
         {
           id: `TX-${entry.code}`,
@@ -797,12 +856,12 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ]);
       setSlip([]);
       setNotifications((n) => [
-        { id: entry.code, title: "Bet placed (GHS)", body: `Slip ${entry.code} placed with GHS ${stake.toFixed(2)} stake.`, time: "just now", read: false, kind: "result" },
+        { id: entry.code, title: "Bet placed (GHS)", body: `Slip ${entry.code} placed with GHS ${stake.toFixed(2)} stake. Potential Win: GHS ${potWin.toFixed(2)}.`, time: "just now", read: false, kind: "result" },
         ...n,
       ]);
       return entry;
     },
-    [slip],
+    [slip, allMatches, totalMultiplier],
   );
 
   const markAllRead = useCallback(() => setNotifications((n) => n.map((x) => ({ ...x, read: true }))), []);
@@ -893,52 +952,114 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     return success;
   }, []);
 
-  // Sports API State Logic
-  const [apiMatches, setApiMatches] = useState<Match[]>([]);
-  const [isApiLoading, setIsApiLoading] = useState<boolean>(false);
-  const [apiError, setApiError] = useState<string | null>(null);
-  const [lastApiUpdate, setLastApiUpdate] = useState<string | null>(null);
-  const [apiLiveCount, setApiLiveCount] = useState<number>(0);
-  const [apiSourcesFetched, setApiSourcesFetched] = useState<number>(0);
-  const [enableLiveApi, setEnableLiveApi] = useState<boolean>(true);
+  const settleBet = useCallback((code: string, outcome: "WON" | "LOST" = "WON") => {
+    setHistory((prev) => {
+      return prev.map((entry) => {
+        if (entry.code !== code || entry.status !== "PENDING") return entry;
+        const potWin = entry.potWin ?? Number((entry.stake * entry.selections.reduce((acc, s) => acc * s.multiplier, 1)).toFixed(2));
+        if (outcome === "WON") {
+          setBalance((prevBal) => Number((prevBal + potWin).toFixed(2)));
+          setTransactions((t) => [
+            {
+              id: `TX-WIN-${entry.code}-${Date.now()}`,
+              type: "PAYOUT",
+              amount: potWin,
+              method: "Winning Bet Payout",
+              reference: entry.code,
+              createdAt: new Date().toISOString(),
+            },
+            ...t,
+          ]);
+          setNotifications((n) => [
+            {
+              id: `NOTIF-WIN-${entry.code}-${Date.now()}`,
+              title: "🎉 You Won!",
+              body: `Slip ${entry.code} won as predicted! GHS ${potWin.toFixed(2)} has been added to your balance.`,
+              time: "just now",
+              read: false,
+              kind: "result" as const,
+            },
+            ...n,
+          ]);
+          toast.success(`🎉 Bet Won! GHS ${potWin.toFixed(2)} credited to your account!`, { duration: 6000 });
+          return { ...entry, status: "WON" as const, payout: potWin };
+        } else {
+          toast.info(`Slip ${entry.code} settled as LOST.`);
+          return { ...entry, status: "LOST" as const, payout: 0 };
+        }
+      });
+    });
+  }, []);
 
-  const fetchApiMatches = useCallback(async () => {
-    if (!enableLiveApi) return;
-    setIsApiLoading(true);
-    setApiError(null);
-    try {
-      // Pass Ghana's current date so ESPN returns today's matches in Ghana time
-      const todayParam = espnDateParam(0);
-      const res = await fetchLiveSportsFixtures(undefined, todayParam);
-      setApiMatches(res.matches);
-      setApiLiveCount(res.liveCount);
-      setApiSourcesFetched(res.sourcesFetched);
-      // Show last-update clock in Ghana GMT
-      setLastApiUpdate(formatClockGhana(new Date()));
-    } catch (e: any) {
-      setApiError(e?.message || "Failed to load live sports fixtures");
-    } finally {
-      setIsApiLoading(false);
-    }
-  }, [enableLiveApi]);
-
+  // ── Auto-settle PENDING bets when all selections' matches finish ──
   useEffect(() => {
-    fetchApiMatches();
-    const interval = setInterval(() => {
-      fetchApiMatches();
-    }, 25000);
-    return () => clearInterval(interval);
-  }, [fetchApiMatches]);
+    setHistory((prevHistory) => {
+      let changed = false;
+      let totalCredited = 0;
+      const winningEntries: { code: string; payout: number }[] = [];
 
-  const allMatches = useMemo(() => {
-    const convertedAdmin = adminMatches.map((am) =>
-      convertAdminMatchToMatch(am, adminLeagues)
-    );
-    const adminIds = new Set(convertedAdmin.map((m) => m.id));
-    const nonAdminApi = apiMatches.filter((m) => !adminIds.has(m.id));
+      const settled = prevHistory.map((entry) => {
+        if (entry.status !== "PENDING") return entry;
 
-    return [...convertedAdmin, ...nonAdminApi];
-  }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
+        // Check if ALL selections in this slip have a finished match
+        const allFinished = entry.selections.every((sel) => {
+          const m = allMatches.find((x) => x.id === sel.matchId) || matchById(sel.matchId);
+          return m && m.status === "FINISHED";
+        });
+        if (!allFinished) return entry;
+
+        // Evaluate each selection against the final score
+        const allWon = entry.selections.every((sel) => {
+          const m = allMatches.find((x) => x.id === sel.matchId) || matchById(sel.matchId);
+          if (!m) return false;
+          return evaluateSelection(sel, m);
+        });
+
+        const potWin = entry.potWin ?? Number((entry.stake * entry.selections.reduce((acc, s) => acc * s.multiplier, 1)).toFixed(2));
+        changed = true;
+        if (allWon) {
+          totalCredited += potWin;
+          winningEntries.push({ code: entry.code, payout: potWin });
+          return { ...entry, status: "WON" as const, payout: potWin };
+        } else {
+          return { ...entry, status: "LOST" as const, payout: 0 };
+        }
+      });
+
+      if (changed) {
+        if (totalCredited > 0) {
+          setBalance((prevBal) => Number((prevBal + totalCredited).toFixed(2)));
+          winningEntries.forEach(({ code, payout }) => {
+            setTransactions((t) => [
+              {
+                id: `TX-WIN-${code}-${Date.now()}`,
+                type: "PAYOUT",
+                amount: payout,
+                method: "Winning Bet Payout",
+                reference: code,
+                createdAt: new Date().toISOString(),
+              },
+              ...t,
+            ]);
+            setNotifications((n) => [
+              {
+                id: `NOTIF-WIN-${code}-${Date.now()}`,
+                title: "🎉 You Won!",
+                body: `Slip ${code} won! GHS ${payout.toFixed(2)} has been credited to your balance.`,
+                time: "just now",
+                read: false,
+                kind: "result" as const,
+              },
+              ...n,
+            ]);
+          });
+          toast.success(`🎉 Bet Won! GHS ${totalCredited.toFixed(2)} added to your balance!`, { duration: 6000 });
+        }
+        return settled;
+      }
+      return prevHistory;
+    });
+  }, [allMatches, tick]);
 
   const value: BetrixState = {
     profile: {
@@ -990,6 +1111,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     clearSlip,
     loadSlip,
     confirmSlip,
+    settleBet,
     markAllRead,
     markRead,
     totalMultiplier,
@@ -1027,6 +1149,132 @@ export function useBetrix() {
 
 export function selectionMatch(s: Selection): Match | undefined {
   return matchById(s.matchId);
+}
+
+/** Evaluates whether a user's selection won according to the finished match scores */
+export function evaluateSelection(sel: Selection, m: Match): boolean {
+  const h = m.homeScore ?? 0;
+  const a = m.awayScore ?? 0;
+  const optId = (sel.optionId || "").toLowerCase().trim();
+  const label = (sel.optionLabel || "").toLowerCase().trim();
+  const mktId = (sel.marketId || "").toLowerCase().trim();
+  const mktName = (sel.marketName || "").toLowerCase().trim();
+
+  // 1. Correct Score
+  if (
+    mktId === "cs" ||
+    mktId === "m_correct_score" ||
+    mktName.includes("correct score") ||
+    optId.startsWith("cs-")
+  ) {
+    const cleanScore = label.replace(/[^\d:]/g, "") || optId.replace("cs-", "").trim();
+    return cleanScore === `${h}:${a}`;
+  }
+
+  // 2. Both Teams To Score (BTTS)
+  if (
+    mktId === "btts" ||
+    mktId === "m_btts" ||
+    mktName.includes("both teams")
+  ) {
+    if (label === "yes" || optId.includes("yes")) return h > 0 && a > 0;
+    if (label === "no" || optId.includes("no")) return h === 0 || a === 0;
+  }
+
+  // 3. Over / Under Goals
+  if (
+    mktId === "ou" ||
+    mktId.includes("overunder") ||
+    mktId.includes("o/u") ||
+    mktName.includes("over") ||
+    mktName.includes("under") ||
+    mktName.includes("total goals") ||
+    optId.includes("_o") ||
+    optId.includes("_u") ||
+    label.includes("over") ||
+    label.includes("under")
+  ) {
+    const total = h + a;
+    let threshold = 2.5;
+    const thresholdMatch = (label + " " + mktId + " " + mktName).match(/(\d+\.\d+)/);
+    if (thresholdMatch && thresholdMatch[1]) {
+      threshold = parseFloat(thresholdMatch[1]);
+    }
+    if (label.includes("over") || optId.includes("over") || optId.includes("_o")) {
+      return total > threshold;
+    }
+    if (label.includes("under") || optId.includes("under") || optId.includes("_u")) {
+      return total < threshold;
+    }
+  }
+
+  // 4. Double Chance
+  if (
+    mktId === "dc" ||
+    mktId.includes("double_chance") ||
+    mktName.includes("double chance") ||
+    optId.includes("_1x") ||
+    optId.includes("_x2") ||
+    optId.includes("_12") ||
+    label.includes(" or ")
+  ) {
+    if (optId.includes("1x") || label.includes("or draw") || label.includes("1x")) {
+      return h >= a;
+    }
+    if (optId.includes("x2") || label.includes("draw or") || label.includes("x2")) {
+      return a >= h;
+    }
+    if (optId.includes("12") || label.includes("12")) {
+      return h !== a;
+    }
+  }
+
+  // 5. Handicap
+  if (mktId.includes("handicap") || mktId.includes("hcp") || mktName.includes("handicap")) {
+    if (mktId.includes("02") || mktName.includes("0:2")) {
+      if (optId.includes("home") || label.includes("(-2)")) return h - 2 > a;
+      if (optId.includes("draw") || label.includes("0:2")) return h - 2 === a;
+      if (optId.includes("away") || label.includes("(+2)")) return a + 2 > h;
+    } else {
+      if (optId.includes("home") || label.includes("(-1)")) return h - 1 > a;
+      if (optId.includes("draw") || label.includes("0:1")) return h - 1 === a;
+      if (optId.includes("away") || label.includes("(+1)")) return a + 1 > h;
+    }
+  }
+
+  // 6. 1X2 / Match Result
+  if (
+    label === "1" ||
+    label === "home" ||
+    optId.endsWith("_1") ||
+    optId === "opt_home" ||
+    optId === "opt_1" ||
+    optId === "home"
+  ) {
+    return h > a;
+  }
+  if (
+    label === "x" ||
+    label === "draw" ||
+    optId.endsWith("_x") ||
+    optId === "opt_draw" ||
+    optId === "opt_x" ||
+    optId === "draw"
+  ) {
+    return h === a;
+  }
+  if (
+    label === "2" ||
+    label === "away" ||
+    optId.endsWith("_2") ||
+    optId === "opt_away" ||
+    optId === "opt_2" ||
+    optId === "away"
+  ) {
+    return a > h;
+  }
+
+  return false;
 }
 
 export const formatPoints = (n: number) => `GHS ${n.toFixed(2)}`;

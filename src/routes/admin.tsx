@@ -335,18 +335,7 @@ function AdminPage() {
               Settings
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("packages")}
-              className={cn(
-                "px-4 py-2 rounded-xl text-xs font-black whitespace-nowrap transition-all",
-                activeTab === "packages"
-                  ? "bg-[#E41B23] text-white border border-[#E41B23] shadow-xs"
-                  : "bg-[#1e1e26] text-gray-400 hover:text-white border border-[#2a2a35]"
-              )}
-            >
-              Packages & credits
-            </button>
+
 
             <button
               type="button"
@@ -651,30 +640,7 @@ function AdminPage() {
             </div>
           )}
 
-          {/* TAB 4: PACKAGES */}
-          {activeTab === "packages" && (
-            <div className="bg-[#121216] rounded-2xl p-4 md:p-5 border border-[#2a2a35] shadow-sm space-y-4">
-              <h3 className="text-sm font-black text-white">VIP Credit Packages & Access Plans</h3>
-              <p className="text-xs text-gray-400">Manage credit bundles offered to users for premium match insights.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl border border-[#2a2a35] bg-[#1e1e26] space-y-2">
-                  <span className="text-xs font-bold text-gray-400">Starter Pack</span>
-                  <p className="text-xl font-black text-white font-mono">GH₵20</p>
-                  <p className="text-[11px] text-gray-500">5 VIP analysis credits</p>
-                </div>
-                <div className="p-3.5 rounded-xl border border-[#E41B23]/30 bg-[#E41B23]/5 space-y-2">
-                  <span className="text-xs font-bold text-[#E41B23]">Pro Analyst</span>
-                  <p className="text-xl font-black text-white font-mono">GH₵50</p>
-                  <p className="text-[11px] text-gray-400">15 VIP credits + priority sync</p>
-                </div>
-                <div className="p-3.5 rounded-xl border border-[#F5C400]/20 bg-[#F5C400]/5 space-y-2">
-                  <span className="text-xs font-bold text-[#F5C400]">Elite Syndicate</span>
-                  <p className="text-xl font-black text-white font-mono">GH₵150</p>
-                  <p className="text-[11px] text-gray-400">50 credits + all leagues access</p>
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* TAB 5: USERS */}
           {activeTab === "users" && (
