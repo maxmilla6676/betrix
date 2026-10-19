@@ -258,9 +258,11 @@ function HomePage() {
 
   const { allMatches } = useBetrix();
 
-  // All Live Matches
+  // All Live Matches — sorted by match minute descending (most active first)
   const liveMatches = useMemo(() => {
-    return allMatches.filter((m) => m.status === "LIVE");
+    return allMatches
+      .filter((m) => m.status === "LIVE")
+      .sort((a, b) => (b.minute ?? 0) - (a.minute ?? 0));
   }, [allMatches]);
 
   // Show only 5 live matches unless expanded
@@ -277,6 +279,7 @@ function HomePage() {
   }, [allMatches, selectedSport]);
 
   // Group fixtures by Date bucket (Today vs Tomorrow) using Ghana time
+  // Each bucket is sorted ascending by kickoff time
   const groupedFixtures = useMemo(() => {
     const buckets: { TODAY: Match[]; TOMORROW: Match[] } = { TODAY: [], TOMORROW: [] };
     for (const m of filteredFixtures) {
@@ -287,6 +290,16 @@ function HomePage() {
         buckets.TOMORROW.push(m);
       }
     }
+    // Sort each bucket: LIVE first (by minute desc), then SCHEDULED ascending by kickoff time
+    const sortBucket = (list: Match[]) =>
+      list.sort((a, b) => {
+        if (a.status === "LIVE" && b.status !== "LIVE") return -1;
+        if (b.status === "LIVE" && a.status !== "LIVE") return 1;
+        if (a.status === "LIVE" && b.status === "LIVE") return (b.minute ?? 0) - (a.minute ?? 0);
+        return a.kickoff.localeCompare(b.kickoff);
+      });
+    sortBucket(buckets.TODAY);
+    sortBucket(buckets.TOMORROW);
     return buckets;
   }, [filteredFixtures]);
 

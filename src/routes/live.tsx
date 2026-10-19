@@ -153,7 +153,9 @@ function LivePage() {
 
   const currentSportMatches = useMemo(() => {
     const combined = [...extraLiveSportsMatches, ...storeLive];
-    return combined.filter((m) => m.sportId === activeSport);
+    return combined
+      .filter((m) => m.sportId === activeSport)
+      .sort((a, b) => (b.period ? parseInt(b.period) : 0) - (a.period ? parseInt(a.period) : 0));
   }, [activeSport, storeLive]);
 
   // Group current matches by league

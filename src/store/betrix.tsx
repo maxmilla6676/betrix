@@ -311,7 +311,17 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       deduplicated.push(m);
     }
 
-    return deduplicated;
+    return deduplicated.sort((a, b) => {
+      // LIVE first, sorted by minute descending (furthest into game first)
+      if (a.status === "LIVE" && b.status !== "LIVE") return -1;
+      if (b.status === "LIVE" && a.status !== "LIVE") return 1;
+      if (a.status === "LIVE" && b.status === "LIVE") return (b.minute ?? 0) - (a.minute ?? 0);
+      // FINISHED last
+      if (a.status === "FINISHED" && b.status !== "FINISHED") return 1;
+      if (b.status === "FINISHED" && a.status !== "FINISHED") return -1;
+      // SCHEDULED: ascending kickoff time (earliest first)
+      return a.kickoff.localeCompare(b.kickoff);
+    });
   }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
   // Revenue & Stat overrides (null by default to use real live data)
