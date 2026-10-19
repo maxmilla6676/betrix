@@ -230,11 +230,25 @@ export async function fetchLiveSportsFixtures(selectedSourceIds?: string[], targ
   const seenMatchKeys = new Set<string>();
   let sourcesFetched = 0;
 
+  // On Vercel (production), route through our /api/espn serverless proxy to avoid CORS.
+  // On localhost the dev server has no CORS restrictions so we can hit ESPN directly.
+  const isProduction = typeof window !== "undefined" && window.location.hostname !== "localhost" && !window.location.hostname.startsWith("192.168.") && !window.location.hostname.startsWith("127.");
+
   for (const source of sourcesToFetch) {
     try {
-      let fetchUrl = source.url;
-      if (targetDateStr) {
-        fetchUrl += (fetchUrl.includes("?") ? "&" : "?") + `dates=${targetDateStr}`;
+      let fetchUrl: string;
+      if (isProduction) {
+        // Use our serverless proxy — server fetches ESPN with no CORS issue
+        fetchUrl = `/api/espn?url=${encodeURIComponent(source.url)}`;
+        if (targetDateStr) {
+          fetchUrl += `&dates=${encodeURIComponent(targetDateStr)}`;
+        }
+      } else {
+        // Direct ESPN URL on localhost
+        fetchUrl = source.url;
+        if (targetDateStr) {
+          fetchUrl += (fetchUrl.includes("?") ? "&" : "?") + `dates=${targetDateStr}`;
+        }
       }
       const res = await fetch(fetchUrl);
       if (!res.ok) continue;
