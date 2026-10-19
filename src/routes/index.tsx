@@ -121,18 +121,43 @@ function FixtureRow({
                 HOT <Flame className="h-2.5 w-2.5 fill-black" />
               </span>
             )}
+            {match.status === "FINISHED" && (
+              <span className="rounded bg-gray-700/60 px-1 py-0.2 text-[9px] font-black text-gray-300">
+                FT
+              </span>
+            )}
+            {match.status === "LIVE" && (
+              <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[9px] font-black text-emerald-400 border border-emerald-500/30 animate-pulse">
+                LIVE {match.minute ? `${match.minute}'` : ""}
+              </span>
+            )}
             <span className="font-extrabold text-white">{kickoffTimeStr}</span>
             <span className="text-gray-500 font-mono">{matchCode}</span>
-            <span className="truncate text-gray-400 font-medium">{league?.name || "Brasileiro Serie B"}</span>
+            <span className="truncate text-gray-400 font-medium inline-flex items-center gap-1">
+              {league?.logo ? (
+                <img src={league.logo} alt="" className="h-3 w-3 rounded-full object-cover shrink-0" />
+              ) : null}
+              {league?.name || "Brasileiro Serie B"}
+            </span>
           </div>
 
-          {/* Teams Stacked */}
-          <div className="space-y-0.5 pt-0.5">
-            <div className="truncate text-xs sm:text-sm font-extrabold text-white tracking-tight group-hover:text-[#F5C400] transition-colors">
-              {home.name}
+          {/* Teams Stacked with logos */}
+          <div className="space-y-1 pt-0.5">
+            <div className="flex items-center gap-1.5 truncate text-xs sm:text-sm font-extrabold text-white tracking-tight group-hover:text-[#F5C400] transition-colors">
+              {home.logo ? (
+                <img src={home.logo} alt="" className="h-4 w-4 rounded-full object-cover shrink-0 bg-white/10" />
+              ) : (
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: home.color || "#DA291C" }} />
+              )}
+              <span className="truncate">{home.name}</span>
             </div>
-            <div className="truncate text-xs sm:text-sm font-extrabold text-white tracking-tight group-hover:text-[#F5C400] transition-colors">
-              {away.name}
+            <div className="flex items-center gap-1.5 truncate text-xs sm:text-sm font-extrabold text-white tracking-tight group-hover:text-[#F5C400] transition-colors">
+              {away.logo ? (
+                <img src={away.logo} alt="" className="h-4 w-4 rounded-full object-cover shrink-0 bg-white/10" />
+              ) : (
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: away.color || "#034694" }} />
+              )}
+              <span className="truncate">{away.name}</span>
             </div>
           </div>
 
@@ -144,12 +169,12 @@ function FixtureRow({
           </div>
         </div>
 
-        {/* Live Score / Trend Icon */}
+        {/* Live / Finished Score / Trend Icon */}
         <div className="flex flex-col items-center justify-center px-2 text-xs font-black tabular-nums text-gray-300">
-          {isLive ? (
+          {isLive || match.status === "FINISHED" ? (
             <>
-              <span>{match.homeScore ?? 0}</span>
-              <span>{match.awayScore ?? 0}</span>
+              <span className={cn(match.status === "FINISHED" && "text-gray-400")}>{match.homeScore ?? 0}</span>
+              <span className={cn(match.status === "FINISHED" && "text-gray-400")}>{match.awayScore ?? 0}</span>
             </>
           ) : (
             <TrendingUp className="h-4 w-4 text-gray-600 group-hover:text-gray-400" />

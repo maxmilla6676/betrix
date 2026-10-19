@@ -2,6 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { matchById, matches as seedMatches, type Match } from "@/data/football";
 import { fetchLiveSportsFixtures } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
+import {
+  type AdminLeague,
+  type AdminMatch,
+  convertAdminMatchToMatch,
+} from "@/data/adminMatches";
+
+export type { AdminLeague, AdminMatch };
 
 export interface Selection {
   matchId: string;
@@ -132,6 +139,14 @@ interface BetrixState {
   enableLiveApi: boolean;
   setEnableLiveApi: (enabled: boolean) => void;
   fetchApiMatches: () => Promise<void>;
+  // Admin Match & League manager
+  adminLeagues: AdminLeague[];
+  adminMatches: AdminMatch[];
+  addAdminLeague: (l: AdminLeague) => void;
+  deleteAdminLeague: (id: string) => void;
+  addAdminMatch: (m: AdminMatch) => void;
+  deleteAdminMatch: (id: string) => void;
+  updateAdminMatch: (m: Partial<AdminMatch> & { id: string }) => void;
 }
 
 const Ctx = createContext<BetrixState | null>(null);
@@ -246,6 +261,77 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HistoryEntry[]>(seedHistory);
   const [notifications, setNotifications] = useState<AppNotification[]>(seedNotifications);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
+
+  // Admin Match & League Management
+  const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("betrix.admin_leagues.v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [
+      {
+        id: "l_ghana_premier",
+        name: "Ghana Premier League",
+        country: "Ghana",
+        color: "#F5C400",
+        logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/f/fa/Ghana_Premier_League.svg/330px-Ghana_Premier_League.svg.png",
+        createdAt: new Date().toISOString(),
+      },
+    ];
+  });
+
+  const [adminMatches, setAdminMatches] = useState<AdminMatch[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("betrix.admin_matches.v1");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("betrix.admin_leagues.v1", JSON.stringify(adminLeagues));
+    } catch {}
+  }, [adminLeagues]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("betrix.admin_matches.v1", JSON.stringify(adminMatches));
+    } catch {}
+  }, [adminMatches]);
+
+  const addAdminLeague = useCallback((l: AdminLeague) => {
+    setAdminLeagues((prev) => [...prev.filter((x) => x.id !== l.id), l]);
+  }, []);
+
+  const deleteAdminLeague = useCallback((id: string) => {
+    setAdminLeagues((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  const addAdminMatch = useCallback((m: AdminMatch) => {
+    setAdminMatches((prev) => [...prev.filter((x) => x.id !== m.id), m]);
+  }, []);
+
+  const deleteAdminMatch = useCallback((id: string) => {
+    setAdminMatches((prev) => prev.filter((x) => x.id !== id));
+  }, []);
+
+  const updateAdminMatch = useCallback((m: Partial<AdminMatch> & { id: string }) => {
+    setAdminMatches((prev) =>
+      prev.map((item) => (item.id === m.id ? { ...item, ...m } : item))
+    );
+  }, []);
+
+  // Periodic real-time tick to update live match clocks and score transitions every 15s
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((t) => (t + 1) % 1000000);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Revenue & Stat overrides to match exact reference screenshot (GH₵214,600 Total, 8 Partners, 4198 Members, 616 Analyses, 6 Pending)
   const [totalRevenueOverride, setTotalRevenueOverride] = useState<number | null>(214600);
@@ -917,11 +1003,20 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   }, [fetchApiMatches]);
 
   const allMatches = useMemo(() => {
-    if (!enableLiveApi || apiMatches.length === 0) return seedMatches;
-    const apiIds = new Set(apiMatches.map((m) => m.id));
-    const uniqueSeed = seedMatches.filter((m) => !apiIds.has(m.id));
-    return [...apiMatches, ...uniqueSeed];
-  }, [apiMatches, enableLiveApi]);
+    const convertedAdmin = adminMatches.map((am) =>
+      convertAdminMatchToMatch(am, adminLeagues)
+    );
+    const adminIds = new Set(convertedAdmin.map((m) => m.id));
+
+    if (!enableLiveApi || apiMatches.length === 0) {
+      const uniqueSeed = seedMatches.filter((m) => !adminIds.has(m.id));
+      return [...convertedAdmin, ...uniqueSeed];
+    }
+    const nonAdminApi = apiMatches.filter((m) => !adminIds.has(m.id));
+    const apiAndAdminIds = new Set([...adminIds, ...nonAdminApi.map((m) => m.id)]);
+    const uniqueSeed = seedMatches.filter((m) => !apiAndAdminIds.has(m.id));
+    return [...convertedAdmin, ...nonAdminApi, ...uniqueSeed];
+  }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
   const value: BetrixState = {
     profile: {
@@ -989,6 +1084,14 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     enableLiveApi,
     setEnableLiveApi,
     fetchApiMatches,
+    // Admin match manager
+    adminLeagues,
+    adminMatches,
+    addAdminLeague,
+    deleteAdminLeague,
+    addAdminMatch,
+    deleteAdminMatch,
+    updateAdminMatch,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -697,10 +697,19 @@ function LivePage() {
                           <div className="flex items-center gap-2 text-[10px] text-gray-500 font-semibold">
                             <Clock className="w-3 h-3 text-[#F5C400]" />
                             <span className="font-extrabold text-[#F5C400]">{kickoffStr}</span>
-                            <span className="truncate">{league?.name}</span>
+                            <span className="truncate inline-flex items-center gap-1">
+                              {league?.logo ? <img src={league.logo} alt="" className="h-3 w-3 rounded-full object-cover shrink-0" /> : null}
+                              {league?.name}
+                            </span>
                           </div>
-                          <div className="text-xs font-bold text-gray-200 truncate">{home?.name}</div>
-                          <div className="text-xs font-bold text-gray-200 truncate">{away?.name}</div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-200 truncate">
+                            {home?.logo && <img src={home.logo} alt="" className="h-3.5 w-3.5 rounded-full object-cover shrink-0 bg-white/10" />}
+                            <span className="truncate">{home?.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-200 truncate">
+                            {away?.logo && <img src={away.logo} alt="" className="h-3.5 w-3.5 rounded-full object-cover shrink-0 bg-white/10" />}
+                            <span className="truncate">{away?.name}</span>
+                          </div>
                         </Link>
                         <div className="grid grid-cols-3 gap-1 w-40 shrink-0">
                           {[0, 1, 2].map((i) => {
@@ -752,10 +761,19 @@ function LivePage() {
                           <div className="flex items-center gap-2 text-[10px] text-gray-500 font-semibold">
                             <Clock className="w-3 h-3 text-gray-400" />
                             <span className="font-extrabold text-gray-300">{kickoffStr}</span>
-                            <span className="truncate">{league?.name}</span>
+                            <span className="truncate inline-flex items-center gap-1">
+                              {league?.logo ? <img src={league.logo} alt="" className="h-3 w-3 rounded-full object-cover shrink-0" /> : null}
+                              {league?.name}
+                            </span>
                           </div>
-                          <div className="text-xs font-bold text-gray-200 truncate">{home?.name}</div>
-                          <div className="text-xs font-bold text-gray-200 truncate">{away?.name}</div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-200 truncate">
+                            {home?.logo && <img src={home.logo} alt="" className="h-3.5 w-3.5 rounded-full object-cover shrink-0 bg-white/10" />}
+                            <span className="truncate">{home?.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-gray-200 truncate">
+                            {away?.logo && <img src={away.logo} alt="" className="h-3.5 w-3.5 rounded-full object-cover shrink-0 bg-white/10" />}
+                            <span className="truncate">{away?.name}</span>
+                          </div>
                         </Link>
                         <div className="grid grid-cols-3 gap-1 w-40 shrink-0">
                           {[0, 1, 2].map((i) => {

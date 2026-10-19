@@ -26,7 +26,7 @@ export function MatchesPage() {
   const [selectedDate, setSelectedDate] = useState<DateOption>(dateOptions[0]!);
   const [selectedLeague, setSelectedLeague] = useState<string>("all");
 
-  const { allMatches, isApiLoading, fetchApiMatches, apiMatches } = useBetrix();
+  const { allMatches, adminLeagues, isApiLoading, fetchApiMatches, apiMatches } = useBetrix();
   const [dateMatches, setDateMatches] = useState<Match[]>([]);
   const [loadingDate, setLoadingDate] = useState<boolean>(false);
 
@@ -51,8 +51,31 @@ export function MatchesPage() {
     };
   }, [selectedDate]);
 
-  // Combine store matches with date-specific matches
-  const currentList = dateMatches.length > 0 ? dateMatches : allMatches;
+  // Combine store matches with date-specific matches including admin matches for that date
+  const currentList = useMemo(() => {
+    const adminForDate = allMatches.filter((m) => {
+      if (!m.id.startsWith("adm-") && !m.id.startsWith("admin-")) return false;
+      const mDate = m.kickoff.slice(0, 10);
+      return mDate === selectedDate.iso || m.status === "LIVE";
+    });
+
+    if (dateMatches.length > 0) {
+      const existingIds = new Set(dateMatches.map((m) => m.id));
+      const filteredAdmin = adminForDate.filter((m) => !existingIds.has(m.id));
+      return [...filteredAdmin, ...dateMatches];
+    }
+    return allMatches;
+  }, [dateMatches, allMatches, selectedDate.iso]);
+
+  const allAvailableLeagues = useMemo(() => {
+    const custom = (adminLeagues || []).map((al) => ({
+      id: al.id,
+      name: al.name,
+      color: al.color,
+      logoUrl: al.logoUrl,
+    }));
+    return [{ id: "all", name: "All Leagues", color: "#eab308" }, ...leagues, ...custom];
+  }, [adminLeagues]);
 
   const filtered = currentList.filter((m) => {
     if (selectedLeague !== "all" && m.leagueId !== selectedLeague) return false;
@@ -76,7 +99,7 @@ export function MatchesPage() {
         {/* Subheader controls & League Filter */}
         <div className="flex flex-wrap items-center justify-between gap-2 bg-[#18181b] p-2.5 rounded-xl border border-[#27272a]">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
-            {[{ id: "all", name: "All Leagues", color: "#eab308" }, ...leagues].map((l) => (
+            {allAvailableLeagues.map((l) => (
               <button
                 key={l.id}
                 type="button"
