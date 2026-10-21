@@ -680,6 +680,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (remote.partners) setPartnersList(remote.partners);
         if (remote.partnerDeposits) setPartnerDeposits(remote.partnerDeposits);
       }
+    });
   }, []);
 
   const clearAllOpenBets = useCallback(() => {
