@@ -1,4 +1,4 @@
-# Betrix Match Hub 
+# Betrix Match Hub
 
 Build a production-quality, responsive Progressive Web App (PWA) called BETRIX, a modern football prediction and sports entertainment platform using virtual credits/points.
 
