@@ -186,6 +186,28 @@ function seedHistory(): HistoryEntry[] {
   return [];
 }
 
+const DEFAULT_ADMIN_LEAGUES: AdminLeague[] = [
+  {
+    id: "l_ghana_premier",
+    name: "Ghana Premier League",
+    country: "Ghana",
+    color: "#F5C400",
+    logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/f/fa/Ghana_Premier_League.svg/330px-Ghana_Premier_League.svg.png",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
+];
+
+const DEFAULT_PROFILE: Profile = {
+  phone: "",
+  userId: "6939B805",
+  verified: true,
+  tier: "BRONZE I",
+  role: "USER",
+  memberSince: "2026",
+  status: "Active",
+  nextUpdateDate: "Next Month",
+};
+
 export function makeCode() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789";
   let out = "";
@@ -203,47 +225,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const [slip, setSlip] = useState<Selection[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-
-    if (typeof window === "undefined") return false;
-    try {
-      const raw = localStorage.getItem("betrix.state.v7");
-      if (raw) {
-        const p = JSON.parse(raw);
-        return Boolean(p.isLoggedIn && p.phone && p.phone.trim().length > 0);
-      }
-    } catch {}
-    return false;
-  });
-
-  const [profileData, setProfileData] = useState<Profile>(() => {
-    if (typeof window === "undefined") {
-      return {
-        phone: "",
-        userId: "6939B805",
-        verified: true,
-        tier: "BRONZE I",
-        role: "USER",
-        memberSince: new Date().getFullYear().toString(),
-        status: "Active",
-        nextUpdateDate: "Next Month",
-      };
-    }
-    try {
-      const raw = localStorage.getItem("betrix.profile.v1");
-      if (raw) return JSON.parse(raw);
-    } catch {}
-    return {
-      phone: "",
-      userId: "6939B805",
-      verified: true,
-      tier: "BRONZE I",
-      role: "USER",
-      memberSince: new Date().getFullYear().toString(),
-      status: "Active",
-      nextUpdateDate: "Next Month",
-    };
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  const [profileData, setProfileData] = useState<Profile>(DEFAULT_PROFILE);
 
   useEffect(() => {
     try {
@@ -270,32 +253,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
 
   // Admin Match & League Management
-  const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = localStorage.getItem("betrix.admin_leagues.v1");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [
-      {
-        id: "l_ghana_premier",
-        name: "Ghana Premier League",
-        country: "Ghana",
-        color: "#F5C400",
-        logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/f/fa/Ghana_Premier_League.svg/330px-Ghana_Premier_League.svg.png",
-        createdAt: new Date().toISOString(),
-      },
-    ];
-  });
-
-  const [adminMatches, setAdminMatches] = useState<AdminMatch[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const saved = localStorage.getItem("betrix.admin_matches.v1");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
+  const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>(DEFAULT_ADMIN_LEAGUES);
+  const [adminMatches, setAdminMatches] = useState<AdminMatch[]>([]);
 
   useEffect(() => {
     try {
@@ -426,6 +385,25 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // 1. Initial hydration from client cache for instant responsiveness
     try {
+      const savedProf = localStorage.getItem("betrix.profile.v1");
+      if (savedProf) {
+        try {
+          setProfileData(JSON.parse(savedProf));
+        } catch {}
+      }
+      const savedLeagues = localStorage.getItem("betrix.admin_leagues.v1");
+      if (savedLeagues) {
+        try {
+          setAdminLeagues(JSON.parse(savedLeagues));
+        } catch {}
+      }
+      const savedMatches = localStorage.getItem("betrix.admin_matches.v1");
+      if (savedMatches) {
+        try {
+          setAdminMatches(JSON.parse(savedMatches));
+        } catch {}
+      }
+
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);

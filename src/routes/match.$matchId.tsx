@@ -348,15 +348,15 @@ function MatchDetailPage() {
   const [starredMarkets, setStarredMarkets] = useState<Record<string, boolean>>({});
 
   // Chat message state (real-time match discussion persisted per match)
-  const [chatMessages, setChatMessages] = useState<Array<{ id: string; user: string; text: string; time: string }>>(() => {
-    if (typeof window === "undefined") return [];
+  const [chatMessages, setChatMessages] = useState<Array<{ id: string; user: string; text: string; time: string }>>([]);
+  const [newMsg, setNewMsg] = useState("");
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(`betrix_chat_${match.id}`);
-      if (saved) return JSON.parse(saved);
+      if (saved) setChatMessages(JSON.parse(saved));
     } catch {}
-    return [];
-  });
-  const [newMsg, setNewMsg] = useState("");
+  }, [match.id]);
 
   const toggleCollapse = (marketId: string) => {
     setCollapsedMarkets((prev) => ({ ...prev, [marketId]: !prev[marketId] }));

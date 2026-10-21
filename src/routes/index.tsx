@@ -589,7 +589,7 @@ function HomePage() {
         <div>
           <div className="flex items-center justify-between px-3 py-2 bg-[#121217] text-xs font-black text-[#F5C400]">
             <span>TODAY</span>
-            <span className="text-gray-400 text-[11px]">{groupedFixtures.TODAY.length}</span>
+            <span suppressHydrationWarning className="text-gray-400 text-[11px]">{groupedFixtures.TODAY.length}</span>
           </div>
 
           {/* Sub-header bar: dynamic today date | 1 X 2 */}
@@ -620,7 +620,7 @@ function HomePage() {
         <div className="mt-3 border-t border-[#21212a]">
           <div className="flex items-center justify-between px-3 py-2 bg-[#121217] text-xs font-black text-[#F5C400]">
             <span>TOMORROW</span>
-            <span className="text-gray-400 text-[11px]">
+            <span suppressHydrationWarning className="text-gray-400 text-[11px]">
               {groupedFixtures.TOMORROW.length}
             </span>
           </div>

@@ -72,14 +72,17 @@ export async function createSeevCheckout(
       }),
     });
 
-    const data = await response.json();
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {}
 
-    if (!response.ok || !data.success) {
+    if (!response.ok || !data?.success) {
       return {
         success: false,
         reference: generatedRef,
-        error: data.error || `Gateway returned status ${response.status}`,
-        isSandbox: data.isSandbox,
+        error: data?.error || (response.status === 404 ? "Gateway endpoint unavailable (404)" : `Gateway returned status ${response.status}`),
+        isSandbox: data?.isSandbox,
       };
     }
 
@@ -142,12 +145,15 @@ export async function createSeevPayout(
       }),
     });
 
-    const data = await response.json();
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {}
 
-    if (!response.ok || !data.success) {
+    if (!response.ok || !data?.success) {
       return {
         success: false,
-        error: data.error || `Payout gateway returned status ${response.status}`,
+        error: data?.error || (response.status === 404 ? "Payout endpoint unavailable (404)" : `Payout gateway returned status ${response.status}`),
       };
     }
 
@@ -176,13 +182,16 @@ export async function verifySeevPayment(
     if (reference) params.set("ref", reference);
 
     const response = await fetch(`/api/seevplus/verify?${params.toString()}`);
-    const data = await response.json();
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {}
 
     if (!response.ok) {
       return {
         verified: false,
         status: "failed",
-        error: data.error || "Verification failed",
+        error: data?.error || (response.status === 404 ? "Verify endpoint unavailable (404)" : "Verification failed"),
       };
     }
 

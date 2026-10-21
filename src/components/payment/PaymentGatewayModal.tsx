@@ -148,6 +148,12 @@ export function PaymentGatewayModal({
 
     setTxRef(res.reference);
 
+    if (!res.success) {
+      setStep("input");
+      toast.error(res.error || "Failed to initialize payment gateway session.");
+      return;
+    }
+
     if (res.checkoutUrl) {
       // Live SeevPlus checkout URL returned
       setCheckoutUrl(res.checkoutUrl);
