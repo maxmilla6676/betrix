@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   Rocket,
   CheckCircle2, RefreshCw, Star, BarChart3,
   ChevronLeft, Search, Play,
 } from "lucide-react";
-import { useBetrix, formatGHS } from "@/store/betrix";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/games")({
@@ -17,6 +16,58 @@ export const Route = createFileRoute("/games")({
   }),
   component: GamesPage,
 });
+
+// ─── Demo wallet ──────────────────────────────────────────────────────────────
+// Games run on free play credits in the browser. They never touch the real GHS
+// wallet: a real-money casino needs server-side outcomes and a separate licence.
+const DEMO_KEY = "betrix.demoCredits";
+const DEMO_START = 1000;
+let demoCredits = DEMO_START;
+const demoListeners = new Set<() => void>();
+if (typeof window !== "undefined") {
+  const saved = Number(window.localStorage.getItem(DEMO_KEY));
+  if (Number.isFinite(saved) && saved > 0) demoCredits = saved;
+}
+function setDemoCredits(next: number) {
+  demoCredits = Math.max(0, Math.round(next * 100) / 100);
+  try {
+    window.localStorage.setItem(DEMO_KEY, String(demoCredits));
+  } catch {
+    /* storage unavailable */
+  }
+  demoListeners.forEach((l) => l());
+}
+function useDemoWallet() {
+  const balance = useSyncExternalStore(
+    (cb) => {
+      demoListeners.add(cb);
+      return () => demoListeners.delete(cb);
+    },
+    () => demoCredits,
+    () => DEMO_START,
+  );
+  return {
+    balance,
+    withdraw: (n: number) => setDemoCredits(demoCredits - n),
+    deposit: (n: number) => setDemoCredits(demoCredits + n),
+    reset: () => setDemoCredits(DEMO_START),
+  };
+}
+const formatDemo = (n: number) => `${n.toFixed(2)} credits`;
+
+function DemoBanner() {
+  const { balance, reset } = useDemoWallet();
+  return (
+    <div role="note" className="flex items-center justify-between gap-2 border-b border-[#F5C400]/30 bg-[#F5C400]/10 px-4 py-2 text-[11px] font-bold text-[#F5C400]">
+      <span>DEMO MODE — free play credits, no real money. Balance: {formatDemo(balance)}</span>
+      {balance < 1 && (
+        <button type="button" onClick={reset} className="rounded-md border border-[#F5C400]/40 px-2 py-0.5 text-[10px] hover:bg-[#F5C400]/20">
+          Reset credits
+        </button>
+      )}
+    </div>
+  );
+}
 
 // ─── Game Catalogue ───────────────────────────────────────────────────────────
 type GameId = "aerocash" | "mines" | "cardburst" | "spainbomb" | "soccerstrike" | "luckydice";
@@ -185,7 +236,7 @@ function GameShell({ gameId, onBack }: { gameId: GameId; onBack: () => void }) {
 
 // ─── AeroCash ─────────────────────────────────────────────────────────────────
 function AeroCashGame() {
-  const { balance, withdraw, deposit } = useBetrix();
+  const { balance, withdraw, deposit } = useDemoWallet();
   const [multiplier, setMultiplier] = useState(1.0);
   const [gameState, setGameState] = useState<"IDLE" | "RUNNING" | "CRASHED">("IDLE");
   const [stake, setStake] = useState(50);
@@ -279,7 +330,7 @@ function AeroCashGame() {
           )}
           {cashedOut && (
             <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-green-600 text-white font-black px-4 py-2 rounded-full text-xs shadow-lg animate-bounce">
-              <CheckCircle2 className="h-4 w-4" /> CASHED OUT {cashoutMult.toFixed(2)}x (+{winAmount} GHS)
+              <CheckCircle2 className="h-4 w-4" /> CASHED OUT {cashoutMult.toFixed(2)}x (+{winAmount} credits)
             </div>
           )}
         </div>
@@ -288,7 +339,7 @@ function AeroCashGame() {
       <div className="bg-[#0e1520] border border-[#1a2840] rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] font-extrabold text-gray-500 uppercase">Stake (GHS)</label>
+            <label className="text-[10px] font-extrabold text-gray-500 uppercase">Stake (credits)</label>
             <input id="aerocash-stake" type="number" value={stake} onChange={e => setStake(Number(e.target.value))} disabled={gameState === "RUNNING"}
               className="w-full mt-1 bg-[#141c2e] border border-[#243248] rounded-xl px-3 py-2 text-white font-mono font-bold text-sm focus:outline-none focus:border-[#F5C400]" />
           </div>
@@ -299,9 +350,9 @@ function AeroCashGame() {
           </div>
         </div>
         <div className="flex items-center justify-between text-[10px] text-gray-500 font-bold">
-          <span>Balance: <span className="text-white">{formatGHS(balance)}</span></span>
+          <span>Balance: <span className="text-white">{formatDemo(balance)}</span></span>
           {gameState === "RUNNING" && hasBet && !cashedOut && (
-            <span className="text-[#F5C400]">Potential: {formatGHS(Math.round(stake * multiplier))}</span>
+            <span className="text-[#F5C400]">Potential: {formatDemo(Math.round(stake * multiplier))}</span>
           )}
         </div>
         {gameState === "RUNNING" ? (
@@ -311,7 +362,7 @@ function AeroCashGame() {
             setCashedOut(true); setCashoutMult(multiplier); setWinAmount(win); deposit(win);
           }} disabled={cashedOut}
             className="w-full h-12 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-sm uppercase shadow-md transition-all disabled:opacity-50">
-            {cashedOut ? "Cashed Out!" : `CASH OUT (${Math.round(stake * multiplier)} GHS)`}
+            {cashedOut ? "Cashed Out!" : `CASH OUT (${Math.round(stake * multiplier)} credits)`}
           </button>
         ) : (
           <button id="aerocash-bet" onClick={() => {
@@ -319,7 +370,7 @@ function AeroCashGame() {
             withdraw(stake); setHasBet(true); setCashedOut(false); setMultiplier(1.0); setGameState("RUNNING");
           }} disabled={stake > balance}
             className="w-full h-12 rounded-xl bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm uppercase shadow-md transition-all disabled:opacity-40">
-            PLACE BET ({stake} GHS)
+            PLACE BET ({stake} credits)
           </button>
         )}
       </div>
@@ -329,7 +380,7 @@ function AeroCashGame() {
 
 // ─── Mines ────────────────────────────────────────────────────────────────────
 function MinesGame() {
-  const { balance, withdraw, deposit } = useBetrix();
+  const { balance, withdraw, deposit } = useDemoWallet();
   const [minesStake, setMinesStake] = useState(50);
   const [minesCount, setMinesCount] = useState(5);
   const [grid, setGrid] = useState<Array<"hidden" | "safe" | "mine">>(Array(25).fill("hidden"));
@@ -385,7 +436,7 @@ function MinesGame() {
       <div className="bg-[#0e1520] border border-[#1a2840] rounded-2xl p-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-[10px] font-extrabold text-gray-500 uppercase">Stake (GHS)</label>
+            <label className="text-[10px] font-extrabold text-gray-500 uppercase">Stake (credits)</label>
             <input id="mines-stake" type="number" value={minesStake} onChange={e => setMinesStake(Number(e.target.value))} disabled={active}
               className="w-full mt-1 bg-[#141c2e] border border-[#243248] rounded-xl px-3 py-2 text-white font-mono font-bold text-sm focus:outline-none focus:border-[#F5C400]" />
           </div>
@@ -397,19 +448,19 @@ function MinesGame() {
         </div>
         {cashedOut && (
           <div className="text-center bg-green-900/30 border border-green-700/50 rounded-xl p-3">
-            <p className="text-green-400 font-black text-lg">+{winAmt} GHS</p>
+            <p className="text-green-400 font-black text-lg">+{winAmt} credits</p>
             <p className="text-xs text-gray-400">Cashed out!</p>
           </div>
         )}
         {!active ? (
           <button id="mines-start" onClick={start} disabled={minesStake > balance}
             className="w-full h-12 rounded-xl bg-[#F5C400] hover:bg-[#e0b300] text-black font-black uppercase shadow-md transition-all disabled:opacity-40">
-            Start Game ({minesStake} GHS)
+            Start Game ({minesStake} credits)
           </button>
         ) : (
           <button id="mines-cashout" onClick={cashOut} disabled={safes === 0}
             className="w-full h-12 rounded-xl bg-green-600 hover:bg-green-500 text-white font-black uppercase shadow-md transition-all disabled:opacity-40">
-            Cash Out ({Math.round(minesStake * mult)} GHS)
+            Cash Out ({Math.round(minesStake * mult)} credits)
           </button>
         )}
       </div>
@@ -419,7 +470,7 @@ function MinesGame() {
 
 // ─── Dice/Slots (generic for other games) ────────────────────────────────────
 function DiceGame() {
-  const { balance, withdraw, deposit } = useBetrix();
+  const { balance, withdraw, deposit } = useDemoWallet();
   const SYMS = ["🍒", "🍋", "🍇", "⭐", "💎", "7️⃣", "🔔"];
   const [reels, setReels] = useState([SYMS[0], SYMS[1], SYMS[2]]);
   const [spinning, setSpinning] = useState(false);
@@ -446,8 +497,8 @@ function DiceGame() {
         const f = [SYMS[Math.floor(Math.random() * 7)], SYMS[Math.floor(Math.random() * 7)], SYMS[Math.floor(Math.random() * 7)]];
         if (Math.random() < 0.20) f[1] = f[0] = f[2];
         setReels(f); setSpinning(false);
-        if (f[0] === f[1] && f[1] === f[2]) { deposit(slotStake * 10); setSlotResult(`JACKPOT! +${slotStake * 10} GHS`); }
-        else if (f[0] === f[1] || f[1] === f[2] || f[0] === f[2]) { deposit(slotStake * 2); setSlotResult(`WIN! +${slotStake * 2} GHS`); }
+        if (f[0] === f[1] && f[1] === f[2]) { deposit(slotStake * 10); setSlotResult(`JACKPOT! +${slotStake * 10} credits`); }
+        else if (f[0] === f[1] || f[1] === f[2] || f[0] === f[2]) { deposit(slotStake * 2); setSlotResult(`WIN! +${slotStake * 2} credits`); }
         else setSlotResult("No match. Try again!");
       }
     }, 80);
@@ -498,7 +549,7 @@ function DiceGame() {
           <div className={cn("rounded-xl p-3 text-center border", diceWon ? "bg-green-900/30 border-green-700/50" : "bg-red-900/30 border-red-800/50")}>
             <div className={cn("text-4xl font-black font-mono", diceWon ? "text-green-400" : "text-red-400")}>{diceResult}</div>
             <div className={cn("text-xs font-black uppercase mt-1", diceWon ? "text-green-400" : "text-red-400")}>
-              {diceWon ? `WIN! +${Math.round(diceStake * Number(diceMult))} GHS` : "LOST — Try again!"}
+              {diceWon ? `WIN! +${Math.round(diceStake * Number(diceMult))} credits` : "LOST — Try again!"}
             </div>
           </div>
         )}
@@ -533,6 +584,14 @@ function DiceGame() {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 function GamesPage() {
   const [activeGame, setActiveGame] = useState<GameId | null>(null);
-  if (activeGame) return <GameShell gameId={activeGame} onBack={() => setActiveGame(null)} />;
-  return <CasinoLobby onSelect={id => setActiveGame(id)} />;
+  return (
+    <>
+      <DemoBanner />
+      {activeGame ? (
+        <GameShell gameId={activeGame} onBack={() => setActiveGame(null)} />
+      ) : (
+        <CasinoLobby onSelect={(id) => setActiveGame(id)} />
+      )}
+    </>
+  );
 }

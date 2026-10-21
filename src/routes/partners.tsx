@@ -52,7 +52,8 @@ export function PartnersPage() {
   const {
     partnersList,
     partnerDeposits,
-    simulateUserDepositForPartner,
+    isLoggedIn,
+    authReady,
   } = useBetrix();
 
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>(
@@ -60,7 +61,6 @@ export function PartnersPage() {
   );
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-  const [simAmount, setSimAmount] = useState<number>(500);
 
   // Active Partner selection
   const activePartner =
@@ -68,7 +68,32 @@ export function PartnersPage() {
     partnersList.find((p) => p.status === "APPROVED") ||
     partnersList[0];
 
-  if (!activePartner) return null;
+
+  // Filter deposits attributed to this active partner
+  const relevantDeposits = useMemo(() => {
+    if (!activePartner) return [];
+    return partnerDeposits.filter(
+      (d) => d.partnerId === activePartner.id || d.partnerCode === activePartner.code
+    );
+  }, [partnerDeposits, activePartner]);
+
+  if (!activePartner) {
+    return (
+      <div className="mx-auto max-w-md space-y-3 p-6 text-center">
+        <h1 className="text-xl font-black text-white">Partner Portal</h1>
+        <p className="text-sm text-gray-400">
+          {!authReady
+            ? "Loading…"
+            : isLoggedIn
+              ? "No partner account is linked to your phone number yet."
+              : "Log in with the phone number you used on your partner application to see your dashboard."}
+        </p>
+        <Link to={isLoggedIn ? "/partner-register" : "/auth"} className="inline-block rounded-xl bg-[#F5C400] px-4 py-2 text-xs font-black text-black">
+          {isLoggedIn ? "Apply to become a partner" : "Log in"}
+        </Link>
+      </div>
+    );
+  }
 
   const isPending = activePartner.status === "PENDING";
   const partnerCode = activePartner.code;
@@ -78,12 +103,6 @@ export function PartnersPage() {
   const totalEarned =
     activePartner.totalDeposits * (activePartner.commissionRate / 100);
 
-  // Filter deposits attributed to this active partner
-  const relevantDeposits = useMemo(() => {
-    return partnerDeposits.filter(
-      (d) => d.partnerId === activePartner.id || d.partnerCode === activePartner.code
-    );
-  }, [partnerDeposits, activePartner]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(registrationLink);

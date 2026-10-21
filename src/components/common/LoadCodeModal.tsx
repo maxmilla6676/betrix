@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBetrix, makeCode } from "@/store/betrix";
-import { matches } from "@/data/football";
+import { fetchSlipByCode } from "@/services/backendSync";
 
 interface LoadCodeModalProps {
   open: boolean;
@@ -17,17 +17,16 @@ export function LoadCodeModal({ open, onOpenChange }: LoadCodeModalProps) {
   const [copied, setCopied] = useState(false);
   const { loadSlip, slip } = useBetrix();
 
-  const handleLoad = (e: React.FormEvent) => {
+  const handleLoad = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = code.trim().toUpperCase();
     if (!clean) { setError("Please enter a booking code."); return; }
-    const sampleMatches = matches.slice(0, 3);
-    const selections = sampleMatches.map((m) => {
-      const market = m.markets[0];
-      const opt = market.options[0];
-      return { matchId: m.id, marketId: market.id, marketName: market.name, optionId: opt.id, optionLabel: opt.label, multiplier: opt.multiplier };
-    });
-    loadSlip(selections);
+    const found = await fetchSlipByCode(clean);
+    if (!found || found.selections.length === 0) {
+      setError(`No booking found for ${clean}.`);
+      return;
+    }
+    loadSlip(found.selections);
     setCode("");
     setError("");
     onOpenChange(false);

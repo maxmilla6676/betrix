@@ -67,7 +67,7 @@ export function PartnerRegisterPage() {
       : `BTX-${preferredCode.toUpperCase().replace(/[^A-Z0-9]/g, "")}`
     : "BTX-YOURCODE";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!name.trim()) {
@@ -89,29 +89,23 @@ export function PartnerRegisterPage() {
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const partner = registerPartner({
-        name,
-        email,
-        phone,
-        channel,
-        channelLink: channelLink.trim() || undefined,
-        audienceSize,
-        preferredCode: preferredCode.trim() || undefined,
-        notes: notes.trim() || undefined,
-      });
-
-      setIsSubmitting(false);
-      setSubmittedPartner({
-        id: partner.id,
-        name: partner.name,
-        code: partner.code,
-      });
-
-      toast.success(
-        "Application submitted! Awaiting administrator approval on dashboard."
-      );
-    }, 700);
+    const res = await registerPartner({
+      name,
+      email,
+      phone,
+      channel,
+      channelLink: channelLink.trim() || undefined,
+      audienceSize,
+      preferredCode: preferredCode.trim() || undefined,
+      notes: notes.trim() || undefined,
+    });
+    setIsSubmitting(false);
+    if (!res.code) {
+      toast.error(res.error || "Could not submit your application.");
+      return;
+    }
+    setSubmittedPartner({ id: res.code, name: name.trim(), code: res.code });
+    toast.success("Application submitted! An administrator will review it shortly.");
   };
 
   return (

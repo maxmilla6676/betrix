@@ -24,9 +24,19 @@ import { Route as PointsRouteImport } from './routes/points'
 import { Route as PredictionsRouteImport } from './routes/predictions'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as ApiEspnRouteImport } from './routes/api/espn'
 import { Route as LeaguesIndexRouteImport } from './routes/leagues.index'
 import { Route as LeaguesSlugRouteImport } from './routes/leagues.$slug'
 import { Route as MatchMatchIdRouteImport } from './routes/match.$matchId'
+import { Route as ApiAuthMigrateRouteImport } from './routes/api/auth/migrate'
+import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiBetsPlaceRouteImport } from './routes/api/bets/place'
+import { Route as ApiBetsSettleRouteImport } from './routes/api/bets/settle'
+import { Route as ApiSeevplusCheckoutRouteImport } from './routes/api/seevplus/checkout'
+import { Route as ApiSeevplusPayoutRouteImport } from './routes/api/seevplus/payout'
+import { Route as ApiSeevplusRefreshRouteImport } from './routes/api/seevplus/refresh'
+import { Route as ApiSeevplusVerifyRouteImport } from './routes/api/seevplus/verify'
+import { Route as ApiSeevplusWebhookRouteImport } from './routes/api/seevplus/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -103,6 +113,11 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiEspnRoute = ApiEspnRouteImport.update({
+  id: '/api/espn',
+  path: '/api/espn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaguesIndexRoute = LeaguesIndexRouteImport.update({
   id: '/leagues/',
   path: '/leagues/',
@@ -116,6 +131,51 @@ const LeaguesSlugRoute = LeaguesSlugRouteImport.update({
 const MatchMatchIdRoute = MatchMatchIdRouteImport.update({
   id: '/match/$matchId',
   path: '/match/$matchId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthMigrateRoute = ApiAuthMigrateRouteImport.update({
+  id: '/api/auth/migrate',
+  path: '/api/auth/migrate',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
+  id: '/api/auth/register',
+  path: '/api/auth/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBetsPlaceRoute = ApiBetsPlaceRouteImport.update({
+  id: '/api/bets/place',
+  path: '/api/bets/place',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBetsSettleRoute = ApiBetsSettleRouteImport.update({
+  id: '/api/bets/settle',
+  path: '/api/bets/settle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSeevplusCheckoutRoute = ApiSeevplusCheckoutRouteImport.update({
+  id: '/api/seevplus/checkout',
+  path: '/api/seevplus/checkout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSeevplusPayoutRoute = ApiSeevplusPayoutRouteImport.update({
+  id: '/api/seevplus/payout',
+  path: '/api/seevplus/payout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSeevplusRefreshRoute = ApiSeevplusRefreshRouteImport.update({
+  id: '/api/seevplus/refresh',
+  path: '/api/seevplus/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSeevplusVerifyRoute = ApiSeevplusVerifyRouteImport.update({
+  id: '/api/seevplus/verify',
+  path: '/api/seevplus/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSeevplusWebhookRoute = ApiSeevplusWebhookRouteImport.update({
+  id: '/api/seevplus/webhook',
+  path: '/api/seevplus/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -135,9 +195,19 @@ export interface FileRoutesByFullPath {
   '/predictions': typeof PredictionsRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/api/espn': typeof ApiEspnRoute
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues/': typeof LeaguesIndexRoute
+  '/api/auth/migrate': typeof ApiAuthMigrateRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/place': typeof ApiBetsPlaceRoute
+  '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
+  '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
+  '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
+  '/api/seevplus/verify': typeof ApiSeevplusVerifyRoute
+  '/api/seevplus/webhook': typeof ApiSeevplusWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -155,9 +225,19 @@ export interface FileRoutesByTo {
   '/predictions': typeof PredictionsRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/api/espn': typeof ApiEspnRoute
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues': typeof LeaguesIndexRoute
+  '/api/auth/migrate': typeof ApiAuthMigrateRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/place': typeof ApiBetsPlaceRoute
+  '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
+  '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
+  '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
+  '/api/seevplus/verify': typeof ApiSeevplusVerifyRoute
+  '/api/seevplus/webhook': typeof ApiSeevplusWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -176,9 +256,19 @@ export interface FileRoutesById {
   '/predictions': typeof PredictionsRoute
   '/profile': typeof ProfileRoute
   '/search': typeof SearchRoute
+  '/api/espn': typeof ApiEspnRoute
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues/': typeof LeaguesIndexRoute
+  '/api/auth/migrate': typeof ApiAuthMigrateRoute
+  '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/place': typeof ApiBetsPlaceRoute
+  '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
+  '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
+  '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
+  '/api/seevplus/verify': typeof ApiSeevplusVerifyRoute
+  '/api/seevplus/webhook': typeof ApiSeevplusWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -198,9 +288,19 @@ export interface FileRouteTypes {
     | '/predictions'
     | '/profile'
     | '/search'
+    | '/api/espn'
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues/'
+    | '/api/auth/migrate'
+    | '/api/auth/register'
+    | '/api/bets/place'
+    | '/api/bets/settle'
+    | '/api/seevplus/checkout'
+    | '/api/seevplus/payout'
+    | '/api/seevplus/refresh'
+    | '/api/seevplus/verify'
+    | '/api/seevplus/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -218,9 +318,19 @@ export interface FileRouteTypes {
     | '/predictions'
     | '/profile'
     | '/search'
+    | '/api/espn'
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues'
+    | '/api/auth/migrate'
+    | '/api/auth/register'
+    | '/api/bets/place'
+    | '/api/bets/settle'
+    | '/api/seevplus/checkout'
+    | '/api/seevplus/payout'
+    | '/api/seevplus/refresh'
+    | '/api/seevplus/verify'
+    | '/api/seevplus/webhook'
   id:
     | '__root__'
     | '/'
@@ -238,9 +348,19 @@ export interface FileRouteTypes {
     | '/predictions'
     | '/profile'
     | '/search'
+    | '/api/espn'
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues/'
+    | '/api/auth/migrate'
+    | '/api/auth/register'
+    | '/api/bets/place'
+    | '/api/bets/settle'
+    | '/api/seevplus/checkout'
+    | '/api/seevplus/payout'
+    | '/api/seevplus/refresh'
+    | '/api/seevplus/verify'
+    | '/api/seevplus/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -259,9 +379,19 @@ export interface RootRouteChildren {
   PredictionsRoute: typeof PredictionsRoute
   ProfileRoute: typeof ProfileRoute
   SearchRoute: typeof SearchRoute
+  ApiEspnRoute: typeof ApiEspnRoute
   LeaguesSlugRoute: typeof LeaguesSlugRoute
   MatchMatchIdRoute: typeof MatchMatchIdRoute
   LeaguesIndexRoute: typeof LeaguesIndexRoute
+  ApiAuthMigrateRoute: typeof ApiAuthMigrateRoute
+  ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
+  ApiBetsPlaceRoute: typeof ApiBetsPlaceRoute
+  ApiBetsSettleRoute: typeof ApiBetsSettleRoute
+  ApiSeevplusCheckoutRoute: typeof ApiSeevplusCheckoutRoute
+  ApiSeevplusPayoutRoute: typeof ApiSeevplusPayoutRoute
+  ApiSeevplusRefreshRoute: typeof ApiSeevplusRefreshRoute
+  ApiSeevplusVerifyRoute: typeof ApiSeevplusVerifyRoute
+  ApiSeevplusWebhookRoute: typeof ApiSeevplusWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -371,6 +501,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/espn': {
+      id: '/api/espn'
+      path: '/api/espn'
+      fullPath: '/api/espn'
+      preLoaderRoute: typeof ApiEspnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leagues/': {
       id: '/leagues/'
       path: '/leagues'
@@ -392,6 +529,69 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MatchMatchIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/migrate': {
+      id: '/api/auth/migrate'
+      path: '/api/auth/migrate'
+      fullPath: '/api/auth/migrate'
+      preLoaderRoute: typeof ApiAuthMigrateRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/register': {
+      id: '/api/auth/register'
+      path: '/api/auth/register'
+      fullPath: '/api/auth/register'
+      preLoaderRoute: typeof ApiAuthRegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bets/place': {
+      id: '/api/bets/place'
+      path: '/api/bets/place'
+      fullPath: '/api/bets/place'
+      preLoaderRoute: typeof ApiBetsPlaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bets/settle': {
+      id: '/api/bets/settle'
+      path: '/api/bets/settle'
+      fullPath: '/api/bets/settle'
+      preLoaderRoute: typeof ApiBetsSettleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/seevplus/checkout': {
+      id: '/api/seevplus/checkout'
+      path: '/api/seevplus/checkout'
+      fullPath: '/api/seevplus/checkout'
+      preLoaderRoute: typeof ApiSeevplusCheckoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/seevplus/payout': {
+      id: '/api/seevplus/payout'
+      path: '/api/seevplus/payout'
+      fullPath: '/api/seevplus/payout'
+      preLoaderRoute: typeof ApiSeevplusPayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/seevplus/refresh': {
+      id: '/api/seevplus/refresh'
+      path: '/api/seevplus/refresh'
+      fullPath: '/api/seevplus/refresh'
+      preLoaderRoute: typeof ApiSeevplusRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/seevplus/verify': {
+      id: '/api/seevplus/verify'
+      path: '/api/seevplus/verify'
+      fullPath: '/api/seevplus/verify'
+      preLoaderRoute: typeof ApiSeevplusVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/seevplus/webhook': {
+      id: '/api/seevplus/webhook'
+      path: '/api/seevplus/webhook'
+      fullPath: '/api/seevplus/webhook'
+      preLoaderRoute: typeof ApiSeevplusWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -411,9 +611,19 @@ const rootRouteChildren: RootRouteChildren = {
   PredictionsRoute: PredictionsRoute,
   ProfileRoute: ProfileRoute,
   SearchRoute: SearchRoute,
+  ApiEspnRoute: ApiEspnRoute,
   LeaguesSlugRoute: LeaguesSlugRoute,
   MatchMatchIdRoute: MatchMatchIdRoute,
   LeaguesIndexRoute: LeaguesIndexRoute,
+  ApiAuthMigrateRoute: ApiAuthMigrateRoute,
+  ApiAuthRegisterRoute: ApiAuthRegisterRoute,
+  ApiBetsPlaceRoute: ApiBetsPlaceRoute,
+  ApiBetsSettleRoute: ApiBetsSettleRoute,
+  ApiSeevplusCheckoutRoute: ApiSeevplusCheckoutRoute,
+  ApiSeevplusPayoutRoute: ApiSeevplusPayoutRoute,
+  ApiSeevplusRefreshRoute: ApiSeevplusRefreshRoute,
+  ApiSeevplusVerifyRoute: ApiSeevplusVerifyRoute,
+  ApiSeevplusWebhookRoute: ApiSeevplusWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

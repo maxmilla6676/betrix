@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, type HistoryEntry, type Selection } from "@/store/betrix";
 import { matchById, teamById, isMatchLocked } from "@/data/football";
 import { cn } from "@/lib/utils";
+import { fetchSlipByCode } from "@/services/backendSync";
 
 function generateBookingCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -350,7 +351,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
     setItemStakes((prev) => ({ ...prev, [key]: Math.max(0, val) }));
   };
 
-  const handleLoadBookingCode = (e: React.FormEvent) => {
+  const handleLoadBookingCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const codeToSearch = bookingCode.trim().toUpperCase();
     if (!codeToSearch) {
@@ -358,53 +359,50 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
       return;
     }
     setLoadingCode(true);
-
-    // Look up in actual booked slips history or active matches
-    const foundInHistory = history.find((h) => h.code.toUpperCase() === codeToSearch);
-    if (foundInHistory && foundInHistory.selections.length > 0) {
-      loadSlip(foundInHistory.selections);
-      toast.success(`Booking code ${codeToSearch} loaded with ${foundInHistory.selections.length} selections!`);
-      setLoadingCode(false);
-      setBookingCode("");
-      return;
-    }
-
-    // Find active scheduled matches from the backend
-    const available = allMatches.filter((m) => m.status === "SCHEDULED" && !isMatchLocked(m));
-    if (available.length >= 2) {
-      const s1 = available[0]!;
-      const s2 = available[1]!;
-      const m1 = s1.markets[0];
-      const o1 = m1?.options[0];
-      const m2 = s2.markets[0];
-      const o2 = m2?.options[0];
-      if (m1 && o1 && m2 && o2) {
-        toggleSelection({
-          matchId: s1.id,
-          marketId: m1.id,
-          marketName: m1.name,
-          optionId: o1.id,
-          optionLabel: o1.label,
-          multiplier: o1.multiplier,
-          matchTitle: `${teamById(s1.homeId)?.name || s1.homeId} vs ${teamById(s1.awayId)?.name || s1.awayId}`,
-        });
-        toggleSelection({
-          matchId: s2.id,
-          marketId: m2.id,
-          marketName: m2.name,
-          optionId: o2.id,
-          optionLabel: o2.label,
-          multiplier: o2.multiplier,
-          matchTitle: `${teamById(s2.homeId)?.name || s2.homeId} vs ${teamById(s2.awayId)?.name || s2.awayId}`,
-        });
-        toast.success(`Booking code ${codeToSearch} loaded with live match selections!`);
+    try {
+      const found =
+        history.find((h) => h.code.toUpperCase() === codeToSearch) || (await fetchSlipByCode(codeToSearch));
+      const open = (found?.selections || []).filter((s) => !isMatchLocked(getMatch(s.matchId)));
+      if (!found || found.selections.length === 0) {
+        toast.error(`Booking code ${codeToSearch} not found`);
+      } else if (open.length === 0) {
+        toast.error(`All matches in ${codeToSearch} have already started.`);
+      } else {
+        loadSlip(open);
+        toast.success(
+          open.length < found.selections.length
+            ? `Loaded ${open.length} of ${found.selections.length} selections (started matches skipped).`
+            : `Booking code ${codeToSearch} loaded with ${open.length} selections!`,
+        );
+        setBookingCode("");
       }
-    } else {
-      toast.error(`Booking code ${codeToSearch} not found`);
+    } finally {
+      setLoadingCode(false);
     }
+  };
 
-    setLoadingCode(false);
-    setBookingCode("");
+  const [placing, setPlacing] = useState(false);
+  const handlePlaceBet = async () => {
+    setPlacing(true);
+    try {
+      if (betType === "Single" && slip.length > 1) {
+        // Singles: one bet per selection, each with its own stake.
+        let last: HistoryEntry | null = null;
+        for (const s of [...slip]) {
+          const stake = itemStakes[`${s.matchId}-${s.marketId}`] ?? 10;
+          if (stake <= 0) continue;
+          last = await confirmSlip(stake, [s]);
+        }
+        if (last) setConfirmed(last);
+      } else {
+        const stake = betType === "Single" ? totalStake : globalStake || 30;
+        setConfirmed(await confirmSlip(stake));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not place your bet.");
+    } finally {
+      setPlacing(false);
+    }
   };
 
   const handleBookBet = () => {
@@ -727,14 +725,15 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
               <button
                 type="button"
                 disabled={
+                  placing ||
                   totalStake <= 0 ||
                   isInsufficient ||
                   slip.some((s) => isMatchLocked(getMatch(s.matchId)))
                 }
-                onClick={() => setConfirmed(confirmSlip(totalStake))}
+                onClick={handlePlaceBet}
                 className="flex items-center justify-center h-12 rounded-xl bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs uppercase tracking-wider shadow-md transition-all disabled:opacity-50 active:scale-95"
               >
-                Place Bet
+                {placing ? "Placing…" : "Place Bet"}
               </button>
             </div>
           </div>

@@ -1,3 +1,6 @@
+-- SUPERSEDED by 20261022_secure_betrix.sql. Do NOT re-run this file after that one:
+-- its GRANT ALL + "USING (true)" policies would reopen every table to the public.
+
 -- BETRIX Production Database Migration
 -- Tables: profiles, transactions, slips, partners, partner_deposits, admin_leagues, admin_matches
 

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDownRight, ArrowUpRight, Wallet, PlusCircle, ShieldCheck } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, PlusCircle, ShieldCheck, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { SectionHeading } from "@/components/common/States";
 import { formatGHS, useBetrix } from "@/store/betrix";
-import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
+import { PaymentGatewayModal, PENDING_DEPOSIT_KEY } from "@/components/payment/PaymentGatewayModal";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { GHANA_TZ } from "@/lib/ghana-time";
@@ -20,27 +21,102 @@ export const Route = createFileRoute("/points")({
   component: WalletPage,
 });
 
+const TX_LABELS: Record<string, string> = {
+  DEPOSIT: "Deposit",
+  WITHDRAWAL: "Withdrawal",
+  STAKE: "Stake",
+  PAYOUT: "Winnings",
+  REFUND: "Refund",
+};
+
+/** After SeevPlus redirects back, ask the server to confirm the payment (it polls SeevPlus). */
+function useDepositReturn() {
+  const { isLoggedIn, verifyDeposit } = useBetrix();
+  const [state, setState] = useState<"idle" | "checking" | "credited" | "failed" | "pending">("idle");
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isLoggedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    let orderId = params.get("gateway") === "seevplus" ? params.get("order") : null;
+    if (!orderId) {
+      try {
+        orderId = JSON.parse(sessionStorage.getItem(PENDING_DEPOSIT_KEY) || "null")?.orderId ?? null;
+      } catch {
+        orderId = null;
+      }
+    }
+    if (!orderId) return;
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    let cancelled = false;
+    let attempts = 0;
+    setState("checking");
+    const check = async () => {
+      if (cancelled) return;
+      attempts++;
+      try {
+        const res = await verifyDeposit({ orderId: orderId! });
+        if (res.status === "CREDITED") {
+          sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
+          setState("credited");
+          toast.success(`Payment confirmed — GHS ${res.amount.toFixed(2)} added to your wallet.`);
+          return;
+        }
+        if (res.status === "FAILED") {
+          sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
+          setState("failed");
+          toast.error("The payment was not completed. No money was taken.");
+          return;
+        }
+      } catch {
+        /* transient: keep polling */
+      }
+      if (attempts < 20) {
+        setTimeout(check, 5000);
+      } else {
+        setState("pending");
+      }
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, verifyDeposit]);
+
+  return state;
+}
+
 function WalletPage() {
   const { balance, history, transactions } = useBetrix();
   const [depositOpen, setDepositOpen] = useState(false);
+  const depositState = useDepositReturn();
 
   const staked = history.reduce((a, h) => a + h.stake, 0);
   const won = history.reduce((a, h) => a + h.payout, 0);
   const pending = history.filter((h) => h.status === "PENDING").length;
 
-  const combinedLedger = [
-    ...transactions.map((t) => ({
-      id: t.id,
-      label: `${t.type === "DEPOSIT" ? "Deposit" : t.type === "WITHDRAWAL" ? "Withdrawal" : "Stake"} · ${t.method || t.reference}`,
-      at: t.createdAt,
-      delta: t.type === "DEPOSIT" || t.type === "PAYOUT" ? t.amount : -t.amount,
-      ref: t.reference,
-    })),
-  ];
+  const combinedLedger = transactions.map((t) => ({
+    id: t.id,
+    label: `${TX_LABELS[t.type] || t.type} · ${t.method || t.reference}`,
+    at: t.createdAt,
+    delta: t.type === "DEPOSIT" || t.type === "PAYOUT" || t.type === "REFUND" ? t.amount : -t.amount,
+    ref: t.reference,
+  }));
 
   return (
     <div className="space-y-4 p-3 md:p-6">
       <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={300} />
+
+      {depositState === "checking" && (
+        <div role="status" className="flex items-center gap-2 rounded-2xl border border-[#F5C400]/30 bg-[#F5C400]/10 p-3 text-xs font-bold text-[#F5C400]">
+          <Loader2 className="h-4 w-4 animate-spin" /> Confirming your payment with SeevPlus…
+        </div>
+      )}
+      {depositState === "pending" && (
+        <div role="status" className="rounded-2xl border border-[#2A264F] bg-[#1C1936] p-3 text-xs text-gray-300">
+          Your payment is still processing. Your balance will update automatically once SeevPlus confirms it.
+        </div>
+      )}
 
       {/* Main Balance Header */}
       <section className="bg-gradient-to-br from-[#1C1936] to-[#121026] border border-[#2A264F] rounded-3xl p-6 shadow-xl relative overflow-hidden">

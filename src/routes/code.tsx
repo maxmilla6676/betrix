@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Ticket } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/common/States";
 import { teamById } from "@/data/football";
-import { selectionMatch, useBetrix } from "@/store/betrix";
+import { selectionMatch, useBetrix, type HistoryEntry } from "@/store/betrix";
+import { fetchSlipByCode } from "@/services/backendSync";
 
 export const Route = createFileRoute("/code")({
   head: () => ({
@@ -24,7 +25,22 @@ function CodePage() {
   const { history, loadSlip } = useBetrix();
   const navigate = useNavigate();
   const [code, setCode] = useState("");
-  const found = history.find((h) => h.code.toLowerCase() === code.trim().toLowerCase());
+  const [remote, setRemote] = useState<HistoryEntry | null>(null);
+  const clean = code.trim().toUpperCase();
+  const local = history.find((h) => h.code.toUpperCase() === clean);
+  const found = local || (remote?.code === clean ? remote : undefined);
+
+  // Codes shared by other players are looked up on the server.
+  useEffect(() => {
+    if (local || !/^BTX-[A-Z0-9]{5,6}$/.test(clean)) return;
+    let cancelled = false;
+    fetchSlipByCode(clean).then((r) => {
+      if (!cancelled) setRemote(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clean, local]);
 
   return (
     <div className="mx-auto max-w-lg space-y-4">

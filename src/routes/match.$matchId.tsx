@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import {
   ChevronLeft,
   ChevronDown,
@@ -247,8 +248,7 @@ function generateMatchMarkets(home: Team, away: Team, seed: number): MarketItem[
 
 function MatchDetailPage() {
   const { match: loaderMatch, matchId } = Route.useLoaderData();
-  const navigate = useNavigate();
-  const { toggleSelection, isSelected, slip, allMatches } = useBetrix();
+  const { allMatches } = useBetrix();
 
   const match = (allMatches.find((m) => m.id === matchId) || loaderMatch || matchById(matchId)) as Match | null;
 
@@ -269,6 +269,14 @@ function MatchDetailPage() {
       </div>
     );
   }
+
+  // Hooks live in MatchDetailView so the "not found" return above can't change the hook order.
+  return <MatchDetailView match={match} />;
+}
+
+function MatchDetailView({ match }: { match: Match }) {
+  const navigate = useNavigate();
+  const { toggleSelection, isSelected, slip } = useBetrix();
 
   const home = teamById(match.homeId) || dynamicTeams.get(match.homeId) || {
     id: match.homeId,
@@ -651,7 +659,7 @@ function MatchDetailPage() {
                             <ChevronUp className="h-4 w-4 text-[#F5C400] shrink-0" />
                           )}
                           <span className="truncate text-xs font-extrabold tracking-tight">{market.name}</span>
-                          {isMatchLocked ? (
+                          {isLocked ? (
                             <span className={cn(
                               "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-bold",
                               isMatchFinished
@@ -662,7 +670,7 @@ function MatchDetailPage() {
                               {isMatchFinished ? "Locked" : "In-Play — Locked"}
                             </span>
                           ) : market.info ? (
-                            <Info className="h-3 w-3 text-gray-500 hover:text-gray-300 shrink-0" title={market.info} />
+                            <span title={market.info} className="inline-flex shrink-0"><Info className="h-3 w-3 text-gray-500 hover:text-gray-300 shrink-0" /></span>
                           ) : null}
                         </div>
 
@@ -953,7 +961,7 @@ function CorrectScoreMarketCard({
             <ChevronUp className="h-4 w-4 text-[#F5C400]" />
           )}
           <span className="font-extrabold text-sm text-white">Correct Score</span>
-          <Info className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300" title="Predict exact final score" />
+          <span title="Predict exact final score" className="inline-flex"><Info className="h-3.5 w-3.5 text-gray-500 hover:text-gray-300" /></span>
         </div>
         <button type="button" onClick={onStarToggle} className="text-gray-500 hover:text-[#F5C400]">
           <Star className={cn("h-4 w-4", starred && "fill-[#F5C400] text-[#F5C400]")} />

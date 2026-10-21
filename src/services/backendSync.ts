@@ -1,577 +1,281 @@
 /**
- * Backend Data Sync Service
- * -------------------------
- * Directly syncs real transactions, slips, bets, and partners with Supabase.
- * Seamlessly falls back to local storage if backend tables are pending creation.
+ * Supabase reads for the browser, plus the few writes RLS allows (admin-only
+ * league/match/partner management). Balances, bets and payments are never
+ * written from here — they go through /api/* server routes.
  */
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TransactionRecord, HistoryEntry } from "@/store/betrix";
 import type { PartnerRecord, PartnerDepositRecord } from "@/data/admin";
-import type { AdminLeague, AdminMatch } from "@/data/adminMatches";
+import {
+  adminLeagueFromRow,
+  adminMatchFromRow,
+  type AdminLeague,
+  type AdminMatch,
+} from "@/data/adminMatches";
 
+export { normalizePhone } from "@/lib/phone";
 
-export async function syncDepositToBackend(tx: TransactionRecord, phone?: string) {
-  try {
-    const { error } = await supabase.from("transactions").upsert({
-      id: tx.id,
-      user_phone: phone || "unknown",
-      type: tx.type,
-      amount: tx.amount,
-      method: tx.method,
-      reference: tx.reference,
-      created_at: tx.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on transaction sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing transaction:", err);
-  }
+const txFromRow = (t: any): TransactionRecord => ({
+  id: t.id,
+  type: t.type,
+  amount: Number(t.amount),
+  method: t.method,
+  reference: t.reference,
+  createdAt: t.created_at,
+});
+
+const slipFromRow = (s: any): HistoryEntry => ({
+  code: s.code,
+  createdAt: s.created_at,
+  stake: Number(s.stake ?? 0),
+  payout: Number(s.payout ?? 0),
+  potWin: Number(s.pot_win ?? 0),
+  status: s.status,
+  matchTitle: s.match_title,
+  selections: s.selections || [],
+});
+
+const partnerFromRow = (p: any): PartnerRecord => ({
+  id: p.id,
+  name: p.name,
+  email: p.email ?? undefined,
+  phone: p.phone ?? undefined,
+  channel: p.channel ?? undefined,
+  audienceSize: p.audience_size ?? undefined,
+  code: p.code,
+  commissionRate: Number(p.commission_rate ?? 0),
+  status: p.status,
+  signups: p.signups ?? 0,
+  activeUsers: p.active_users ?? 0,
+  slipsDriven: 0,
+  tier: "Bronze",
+  totalDeposits: Number(p.total_deposits ?? 0),
+  earnings: Number(p.earnings ?? 0),
+  createdAt: p.created_at,
+});
+
+const partnerDepositFromRow = (pd: any): PartnerDepositRecord => ({
+  id: pd.id,
+  partnerId: pd.partner_id,
+  partnerCode: pd.partner_code,
+  userPhone: pd.user_phone,
+  amount: Number(pd.amount),
+  commissionEarned: Number(pd.commission_earned),
+  status: pd.status,
+  createdAt: pd.created_at,
+  date: pd.created_at ? new Date(pd.created_at).toLocaleDateString() : "—",
+});
+
+export interface OwnProfile {
+  userId: string;
+  phone: string;
+  tier: string;
+  role: string;
+  balance: number;
+  verified: boolean;
+  memberSince: string;
 }
 
-export async function syncSlipToBackend(slip: HistoryEntry, phone?: string) {
-  try {
-    const { error } = await supabase.from("slips").upsert({
-      code: slip.code,
-      user_phone: phone || "unknown",
-      stake: slip.stake,
-      payout: slip.payout,
-      pot_win: slip.potWin,
-      status: slip.status,
-      match_title: slip.matchTitle,
-      selections: slip.selections,
-      created_at: slip.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on slip sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing slip:", err);
-  }
-}
-
-export async function syncPartnerToBackend(partner: PartnerRecord) {
-  try {
-    const { error } = await supabase.from("partners").upsert({
-      id: partner.id,
-      name: partner.name,
-      email: partner.email,
-      phone: partner.phone,
-      channel: partner.channel,
-      audience_size: partner.audienceSize,
-      code: partner.code,
-      commission_rate: partner.commissionRate,
-      status: partner.status,
-      signups: partner.signups || 0,
-      active_users: partner.activeUsers || 0,
-      total_deposits: partner.totalDeposits || 0,
-      earnings: partner.earnings || 0,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on partner sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing partner:", err);
-  }
-}
-
-export async function syncPartnerDepositToBackend(pDep: PartnerDepositRecord) {
-  try {
-    const { error } = await supabase.from("partner_deposits").upsert({
-      id: pDep.id,
-      partner_id: pDep.partnerId,
-      partner_code: pDep.partnerCode,
-      user_phone: pDep.userPhone,
-      amount: pDep.amount,
-      commission_earned: pDep.commissionEarned,
-      status: pDep.status,
-      created_at: pDep.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on partner deposit sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing partner deposit:", err);
-  }
-}
-
-export async function fetchBackendInitialData() {
-  try {
-    const [txRes, slipsRes, partnersRes, pDepsRes, leaguesRes, matchesRes] = await Promise.all([
-      supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(100),
-      supabase.from("slips").select("*").order("created_at", { ascending: false }).limit(100),
-      supabase.from("partners").select("*").order("created_at", { ascending: false }),
-      supabase.from("partner_deposits").select("*").order("created_at", { ascending: false }).limit(100),
-      supabase.from("admin_leagues").select("*").order("created_at", { ascending: false }),
-      supabase.from("admin_matches").select("*").order("created_at", { ascending: false }),
-    ]);
-
-    return {
-      transactions: txRes.data ? (txRes.data.map((t: any) => ({
-        id: t.id,
-        type: t.type,
-        amount: Number(t.amount),
-        method: t.method,
-        reference: t.reference,
-        createdAt: t.created_at,
-      })) as TransactionRecord[]) : null,
-
-      slips: slipsRes.data ? (slipsRes.data.map((s: any) => ({
-        code: s.code,
-        createdAt: s.created_at,
-        stake: Number(s.stake),
-        payout: Number(s.payout),
-        potWin: Number(s.pot_win),
-        status: s.status,
-        matchTitle: s.match_title,
-        selections: s.selections || [],
-      })) as HistoryEntry[]) : null,
-
-      partners: partnersRes.data ? (partnersRes.data.map((p: any) => ({
-        id: p.id,
-        name: p.name,
-        email: p.email,
-        phone: p.phone,
-        channel: p.channel,
-        audienceSize: p.audience_size,
-        code: p.code,
-        commissionRate: Number(p.commission_rate),
-        status: p.status,
-        signups: p.signups,
-        activeUsers: p.active_users,
-        totalDeposits: Number(p.total_deposits),
-        earnings: Number(p.earnings),
-        createdAt: p.created_at,
-      })) as PartnerRecord[]) : null,
-
-      partnerDeposits: pDepsRes.data ? (pDepsRes.data.map((pd: any) => ({
-        id: pd.id,
-        partnerId: pd.partner_id,
-        partnerCode: pd.partner_code,
-        userPhone: pd.user_phone,
-        amount: Number(pd.amount),
-        commissionEarned: Number(pd.commission_earned),
-        status: pd.status,
-        createdAt: pd.created_at,
-        date: pd.created_at ? new Date(pd.created_at).toLocaleDateString() : "—",
-      })) as PartnerDepositRecord[]) : null,
-
-      adminLeagues: leaguesRes.data ? (leaguesRes.data.map((l: any) => ({
-        id: l.id,
-        name: l.name,
-        country: l.country,
-        color: l.color,
-        logoUrl: l.logo_url,
-        createdAt: l.created_at,
-      })) as AdminLeague[]) : null,
-
-      adminMatches: matchesRes.data ? (matchesRes.data.map((m: any) => ({
-        id: m.id,
-        leagueId: m.league_id,
-        homeTeam: m.home_team,
-        awayTeam: m.away_team,
-        homeLogoUrl: m.home_logo_url,
-        awayLogoUrl: m.away_logo_url,
-        kickoffDate: m.kickoff_date,
-        kickoffTime: m.kickoff_time,
-        outcome: m.outcome,
-        outcomeScore: m.outcome_score,
-        status: m.status,
-        createdAt: m.created_at,
-      })) as AdminMatch[]) : null,
-    };
-  } catch (err) {
-    console.warn("[Backend Sync] Could not fetch remote backend data:", err);
-    return null;
-  }
-}
-
-
-/** Sync a withdrawal transaction to the backend */
-export async function syncWithdrawalToBackend(tx: TransactionRecord, phone?: string) {
-  return syncDepositToBackend(tx, phone); // same table, same shape
-}
-
-/** Sync a settled slip (WON/LOST) status back to Supabase */
-export async function syncSlipSettlementToBackend(slip: HistoryEntry, phone?: string) {
-  try {
-    const { error } = await supabase.from("slips").upsert({
-      code: slip.code,
-      user_phone: phone || "unknown",
-      stake: slip.stake,
-      payout: slip.payout,
-      pot_win: slip.potWin,
-      status: slip.status,
-      match_title: slip.matchTitle,
-      selections: slip.selections,
-      created_at: slip.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on slip settlement sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing slip settlement:", err);
-  }
-}
-
-/** Sync an admin-created league to Supabase */
-export async function syncAdminLeagueToBackend(league: AdminLeague) {
-  try {
-    const { error } = await supabase.from("admin_leagues").upsert({
-      id: league.id,
-      name: league.name,
-      country: league.country,
-      color: league.color,
-      logo_url: league.logoUrl,
-      created_at: league.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on admin_league sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing admin league:", err);
-  }
-}
-
-/** Delete an admin league from Supabase */
-export async function deleteAdminLeagueFromBackend(id: string) {
-  try {
-    await supabase.from("admin_leagues").delete().eq("id", id);
-  } catch (err) {
-    console.warn("[Backend Sync] Network error deleting admin league:", err);
-  }
-}
-
-/** Sync an admin-created match to Supabase */
-export async function syncAdminMatchToBackend(match: AdminMatch) {
-  try {
-    const { error } = await supabase.from("admin_matches").upsert({
-      id: match.id,
-      league_id: match.leagueId,
-      home_team: match.homeTeam,
-      away_team: match.awayTeam,
-      home_logo_url: match.homeLogoUrl,
-      away_logo_url: match.awayLogoUrl,
-      kickoff_date: match.kickoffDate,
-      kickoff_time: match.kickoffTime,
-      outcome: match.outcome,
-      outcome_score: match.outcomeScore,
-      status: match.status,
-      created_at: match.createdAt,
-    });
-    if (error) {
-      console.warn("[Backend Sync] Notice on admin_match sync:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error syncing admin match:", err);
-  }
-}
-
-/** Delete an admin match from Supabase */
-export async function deleteAdminMatchFromBackend(id: string) {
-  try {
-    await supabase.from("admin_matches").delete().eq("id", id);
-  } catch (err) {
-    console.warn("[Backend Sync] Network error deleting admin match:", err);
-  }
-}
-
-/** Helper to clean phone numbers */
-export function normalizePhone(raw: string): string {
-  let cleaned = (raw || "").trim().replace(/[\s\-()]/g, "");
-  if (cleaned.startsWith("+233")) {
-    cleaned = "0" + cleaned.slice(4);
-  } else if (cleaned.startsWith("233")) {
-    cleaned = "0" + cleaned.slice(3);
-  }
-  return cleaned;
-}
-
-/** SHA-256 password hash */
-export async function hashPassword(password: string): Promise<string> {
-  if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
-    const enc = new TextEncoder().encode(password);
-    const buf = await window.crypto.subtle.digest("SHA-256", enc);
-    return Array.from(new Uint8Array(buf))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-  }
-  return password;
-}
-
-/** Register a new user into Supabase profiles */
-export async function registerUserInBackend(rawPhone: string, password: string, referralCode?: string) {
-  const phone = normalizePhone(rawPhone);
-  if (!phone || phone.length < 9) {
-    return { success: false, error: "Please enter a valid Ghana phone number." };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  try {
-    // Check if phone already registered
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("phone", phone)
-      .maybeSingle();
-
-    if (existing) {
-      return { success: false, error: "An account with this phone number already exists. Please log in." };
-    }
-
-    const userId = Math.floor(10000000 + Math.random() * 90000000).toString(16).toUpperCase();
-    const newProfile = {
-      user_id: userId,
-      phone,
-      password_hash: passwordHash,
-      tier: "Bronze",
-      role: "USER",
-      balance: 0.00,
-      verified: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    const { data, error } = await supabase.from("profiles").insert(newProfile).select().maybeSingle();
-
-    if (error) {
-      console.warn("[Backend Sync] Supabase profile insert notice:", error.message);
-      return {
-        success: true,
-        profile: {
-          userId,
-          phone,
-          tier: "Bronze",
-          role: "USER",
-          balance: 0.00,
-          verified: true,
-          memberSince: new Date().getFullYear().toString(),
-        },
-      };
-    }
-
-    return {
-      success: true,
-      profile: {
-        userId: data?.user_id || userId,
-        phone: data?.phone || phone,
-        tier: data?.tier || "Bronze",
-        role: (data?.role || "USER").toUpperCase(),
-        balance: Number(data?.balance ?? 0),
-        verified: !!data?.verified,
-        memberSince: new Date(data?.created_at || Date.now()).getFullYear().toString(),
-      },
-    };
-  } catch (err: any) {
-    console.error("[Backend Sync] Network error during registration:", err);
-    return { success: false, error: err?.message || "Registration failed. Please check network." };
-  }
-}
-
-/** Authenticate user with Supabase profiles */
-export async function authenticateUserInBackend(rawPhone: string, password: string) {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) {
-    return { success: false, error: "Please enter your phone number." };
-  }
-
-  const passwordHash = await hashPassword(password);
-
-  try {
-    const { data: profile, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("phone", phone)
-      .maybeSingle();
-
-    if (error) {
-      console.warn("[Backend Sync] Supabase profile lookup notice:", error.message);
-    }
-
-    if (!profile) {
-      return { success: false, error: "No account found with this phone number. Please click Register to create one." };
-    }
-
-    if (profile.password_hash && profile.password_hash !== passwordHash) {
-      return { success: false, error: "Incorrect password. Please try again." };
-    }
-
-    // If account was created before password_hash column existed, set it now
-    if (!profile.password_hash) {
-      await supabase.from("profiles").update({ password_hash: passwordHash }).eq("phone", phone);
-    }
-
-    return {
-      success: true,
-      profile: {
-        userId: profile.user_id,
-        phone: profile.phone,
-        tier: profile.tier || "Bronze",
-        role: (profile.role || "USER").toUpperCase(),
-        balance: Number(profile.balance ?? 0),
-        verified: !!profile.verified,
-        memberSince: new Date(profile.created_at || Date.now()).getFullYear().toString(),
-      },
-    };
-  } catch (err: any) {
-    console.error("[Backend Sync] Network error during sign in:", err);
-    return { success: false, error: err?.message || "Sign in failed. Please try again." };
-  }
-}
-
-/** Fetch user profile and balance from Supabase */
-export async function fetchUserProfileFromBackend(rawPhone: string) {
-  const phone = normalizePhone(rawPhone);
+/**
+ * The signed-in user's profile. Looked up by phone because the browser has no
+ * SELECT grant on profiles.auth_id; RLS still limits non-admins to their own row.
+ */
+export async function fetchOwnProfile(): Promise<OwnProfile | null> {
+  const { data: auth } = await supabase.auth.getSession();
+  const user = auth.session?.user;
+  const phone = String(user?.user_metadata?.["phone"] || user?.email?.split("@")[0] || "");
   if (!phone) return null;
-  try {
-    const { data, error } = await supabase
-      .from("profiles")
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("user_id, phone, tier, role, balance, verified, created_at")
+    .eq("phone", phone)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    userId: data.user_id,
+    phone: data.phone,
+    tier: data.tier || "Bronze",
+    role: String(data.role || "USER").toUpperCase(),
+    balance: Number(data.balance ?? 0),
+    verified: !!data.verified,
+    memberSince: new Date(data.created_at || Date.now()).getFullYear().toString(),
+  };
+}
+
+export async function fetchOwnActivity(phone: string) {
+  const [txRes, slipsRes] = await Promise.all([
+    supabase
+      .from("transactions")
       .select("*")
-      .eq("phone", phone)
-      .maybeSingle();
-
-    if (error || !data) return null;
-    return {
-      userId: data.user_id,
-      phone: data.phone,
-      tier: data.tier || "Bronze",
-      role: (data.role || "USER").toUpperCase(),
-      balance: Number(data.balance ?? 0),
-      verified: !!data.verified,
-      memberSince: new Date(data.created_at || Date.now()).getFullYear().toString(),
-    };
-  } catch (err) {
-    console.warn("[Backend Sync] Error fetching user profile:", err);
-    return null;
-  }
-}
-
-
-/** Update user's real balance in Supabase profiles */
-export async function syncUserProfileBalance(rawPhone: string, balance: number) {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) return;
-  try {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ balance, updated_at: new Date().toISOString() })
-      .eq("phone", phone);
-    if (error) {
-      console.warn("[Backend Sync] Notice on balance update:", error.message);
-    }
-  } catch (err) {
-    console.warn("[Backend Sync] Network error updating profile balance:", err);
-  }
-}
-
-/** Fetch user-specific transactions and slips from Supabase */
-export async function fetchUserDataFromBackend(rawPhone: string) {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) return null;
-  try {
-    const [txRes, slipsRes] = await Promise.all([
-      supabase.from("transactions").select("*").eq("user_phone", phone).order("created_at", { ascending: false }).limit(50),
-      supabase.from("slips").select("*").eq("user_phone", phone).order("created_at", { ascending: false }).limit(50),
-    ]);
-
-    return {
-      transactions: txRes.data ? txRes.data.map((t: any) => ({
-        id: t.id,
-        type: t.type,
-        amount: Number(t.amount),
-        method: t.method,
-        reference: t.reference,
-        createdAt: t.created_at,
-      })) as TransactionRecord[] : null,
-
-      slips: slipsRes.data ? slipsRes.data.map((s: any) => ({
-        code: s.code,
-        createdAt: s.created_at,
-        stake: Number(s.stake),
-        payout: Number(s.payout),
-        potWin: Number(s.pot_win),
-        status: s.status,
-        matchTitle: s.match_title,
-        selections: s.selections || [],
-      })) as HistoryEntry[] : null,
-    };
-  } catch (err) {
-    console.warn("[Backend Sync] Error fetching user specific data:", err);
-    return null;
-  }
-}
-
-/** Fetch all registered member profiles from Supabase for the Admin portal */
-export async function fetchAllProfilesFromBackend() {
-  try {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
+      .eq("user_phone", phone)
       .order("created_at", { ascending: false })
-      .limit(200);
-
-    if (error || !data) return [];
-    return data.map((p: any) => ({
-      id: p.id,
-      userId: p.user_id,
-      phone: p.phone,
-      tier: p.tier || "Bronze",
-      role: (p.role || "USER").toUpperCase(),
-      balance: Number(p.balance ?? 0),
-      verified: !!p.verified,
-      createdAt: p.created_at,
-      joined: p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "Recently",
-    }));
-  } catch (err) {
-    console.warn("[Backend Sync] Error fetching all profiles:", err);
-    return [];
-  }
-}
-
-/** Update a user's role (USER <-> ADMIN) in Supabase profiles */
-export async function updateUserRoleInBackend(rawPhone: string, newRole: "USER" | "ADMIN") {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) return { success: false, error: "Invalid phone number" };
-  try {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ role: newRole, updated_at: new Date().toISOString() })
-      .eq("phone", phone);
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Failed to update role" };
-  }
-}
-
-/** Fetch recent community slips from Supabase for Recommended Codes */
-export async function fetchPublicSlipsFromBackend(limit = 10) {
-  try {
-    const { data, error } = await supabase
+      .limit(100),
+    supabase
       .from("slips")
       .select("*")
+      .eq("user_phone", phone)
       .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error || !data) return [];
-    return data.map((s: any) => ({
-      code: s.code,
-      createdAt: s.created_at,
-      stake: Number(s.stake),
-      payout: Number(s.payout),
-      potWin: Number(s.pot_win),
-      status: s.status,
-      matchTitle: s.match_title,
-      selections: s.selections || [],
-    })) as HistoryEntry[];
-  } catch (err) {
-    console.warn("[Backend Sync] Error fetching public slips:", err);
-    return [];
-  }
+      .limit(100),
+  ]);
+  return {
+    transactions: (txRes.data || []).map(txFromRow),
+    slips: (slipsRes.data || []).map(slipFromRow),
+  };
 }
 
+/** Leagues and matches created by admins (public read). */
+export async function fetchAdminCatalog(): Promise<{
+  leagues: AdminLeague[];
+  matches: AdminMatch[];
+}> {
+  const [leaguesRes, matchesRes] = await Promise.all([
+    supabase.from("admin_leagues").select("*").order("created_at", { ascending: false }),
+    supabase.from("admin_matches").select("*").order("created_at", { ascending: false }),
+  ]);
+  return {
+    leagues: (leaguesRes.data || []).map(adminLeagueFromRow),
+    matches: (matchesRes.data || []).map(adminMatchFromRow),
+  };
+}
+
+/** Partners visible to the caller: their own record, or all of them for admins. */
+export async function fetchPartnersData() {
+  const [partnersRes, depositsRes] = await Promise.all([
+    supabase.from("partners").select("*").order("created_at", { ascending: false }),
+    supabase
+      .from("partner_deposits")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200),
+  ]);
+  return {
+    partners: (partnersRes.data || []).map(partnerFromRow),
+    partnerDeposits: (depositsRes.data || []).map(partnerDepositFromRow),
+  };
+}
+
+/** Admin only: recent transactions across all users, and the member count. */
+export async function fetchPlatformStats() {
+  const [txRes, countRes] = await Promise.all([
+    supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(500),
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+  ]);
+  return {
+    transactions: (txRes.data || []).map(txFromRow),
+    userCount: countRes.count ?? 0,
+  };
+}
+
+export async function fetchAllProfilesFromBackend() {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, user_id, phone, tier, role, balance, verified, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error || !data) return [];
+  return data.map((p: any) => ({
+    id: p.id,
+    userId: p.user_id,
+    phone: p.phone,
+    tier: p.tier || "Bronze",
+    role: String(p.role || "USER").toUpperCase(),
+    balance: Number(p.balance ?? 0),
+    verified: !!p.verified,
+    createdAt: p.created_at,
+    joined: p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "Recently",
+  }));
+}
+
+export async function updateUserRoleInBackend(phone: string, newRole: "USER" | "ADMIN") {
+  const { error } = await supabase.rpc("admin_set_role", { p_phone: phone, p_role: newRole });
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+/** Recent community booking codes (no phone numbers or stakes). */
+export async function fetchPublicSlipsFromBackend(limit = 10): Promise<HistoryEntry[]> {
+  const { data, error } = await supabase.rpc("public_slips", { p_limit: limit });
+  if (error || !data) return [];
+  return (data as any[]).map((s) => ({ ...slipFromRow(s), stake: 0, payout: 0, potWin: 0 }));
+}
+
+export async function fetchSlipByCode(code: string): Promise<HistoryEntry | null> {
+  const { data, error } = await supabase.rpc("slip_by_code", { p_code: code });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (error || !row) return null;
+  return { ...slipFromRow(row), stake: 0, payout: 0, potWin: 0 };
+}
+
+export async function applyPartner(p: {
+  name: string;
+  email: string;
+  phone: string;
+  channel: string;
+  audienceSize?: string | undefined;
+  preferredCode?: string | undefined;
+}): Promise<{ code?: string; error?: string }> {
+  const { data, error } = await supabase.rpc("apply_partner", {
+    p_name: p.name,
+    p_email: p.email,
+    p_phone: p.phone,
+    p_channel: p.channel,
+    p_audience_size: p.audienceSize || "",
+    p_code: p.preferredCode || "",
+  });
+  if (error) {
+    return {
+      error: error.message.includes("CODE_TAKEN")
+        ? "That referral code is already taken. Choose another."
+        : "Could not submit your application. Check the details and try again.",
+    };
+  }
+  return { code: String(data) };
+}
+
+export async function updatePartnerInBackend(
+  id: string,
+  patch: { status?: string; commission_rate?: number },
+) {
+  const { error } = await supabase.from("partners").update(patch).eq("id", id);
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+export async function saveAdminLeague(league: AdminLeague) {
+  const { error } = await supabase.from("admin_leagues").upsert({
+    id: league.id,
+    name: league.name,
+    country: league.country,
+    color: league.color,
+    logo_url: league.logoUrl ?? null,
+    created_at: league.createdAt,
+  });
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+export async function deleteAdminLeague(id: string) {
+  const { error } = await supabase.from("admin_leagues").delete().eq("id", id);
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+export async function saveAdminMatch(match: AdminMatch) {
+  const { error } = await supabase.from("admin_matches").upsert({
+    id: match.id,
+    league_id: match.leagueId,
+    home_team: match.homeTeam,
+    away_team: match.awayTeam,
+    home_logo_url: match.homeLogoUrl ?? null,
+    away_logo_url: match.awayLogoUrl ?? null,
+    kickoff_date: match.kickoffDate,
+    kickoff_time: match.kickoffTime,
+    status: match.status,
+    home_score: match.homeScore ?? null,
+    away_score: match.awayScore ?? null,
+    created_at: match.createdAt,
+  });
+  return error ? { success: false, error: error.message } : { success: true };
+}
+
+export async function deleteAdminMatch(id: string) {
+  const { error } = await supabase.from("admin_matches").delete().eq("id", id);
+  return error ? { success: false, error: error.message } : { success: true };
+}

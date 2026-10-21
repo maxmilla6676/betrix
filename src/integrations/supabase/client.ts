@@ -1,9 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
 const env = import.meta.env as Record<string, string | undefined>;
-const supabaseUrl = env["VITE_SUPABASE_URL"] || "https://hkhjjygpozrsittxqbsj.supabase.co";
-const supabaseAnonKey =
-  env["VITE_SUPABASE_ANON_KEY"] ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhraGpqeWdwb3pyc2l0dHhxYnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3MTEyMDIsImV4cCI6MjEwNjI4NzIwMn0.5qYxEW_Q1JMzgWxYMg9Yzd0b2tF133d9_H1VBV_hBrM";
+const supabaseUrl = env["VITE_SUPABASE_URL"] || "";
+const supabaseAnonKey = env["VITE_SUPABASE_ANON_KEY"] || "";
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("[supabase] VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY are not set.");
+}
+
+/** Browser client: anon key + the signed-in user's session. All access is enforced by RLS. */
+export const supabase = createClient(
+  supabaseUrl || "http://localhost",
+  supabaseAnonKey || "missing-anon-key",
+  {
+    auth: {
+      persistSession: typeof window !== "undefined",
+      autoRefreshToken: typeof window !== "undefined",
+      storageKey: "betrix.auth",
+    },
+  },
+);

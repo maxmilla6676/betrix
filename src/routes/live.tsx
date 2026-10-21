@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -76,10 +77,10 @@ function LivePage() {
       leagueName: string;
       period: string;
       homeName: string;
-      homeLogo?: string;
+      homeLogo?: string | undefined;
       homeColor: string;
       awayName: string;
-      awayLogo?: string;
+      awayLogo?: string | undefined;
       awayColor: string;
       homeScore: number;
       awayScore: number;
@@ -371,7 +372,7 @@ function LivePage() {
                 {!isCollapsed && (
                   <div className="divide-y divide-[#121622]">
                     {matchesList.map((m) => {
-                      const market1X2 = m.markets?.find((mk) => mk.id === "1x2" || mk.name === "1X2") || m.markets?.[0];
+                      const market1X2 = m.markets?.find((mk: { id: string; name: string }) => mk.id === "1x2" || mk.name === "1X2") || m.markets?.[0];
                       const options = market1X2?.options || [];
 
                       return (

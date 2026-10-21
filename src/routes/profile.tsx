@@ -44,37 +44,51 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const navigate = useNavigate();
-  const { profile, balance, history, transactions, isLoggedIn, logout, withdraw } = useBetrix();
+  const { profile, balance, history, transactions, isLoggedIn, authReady, logout, withdraw } = useBetrix();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
-  const [withdrawMethod, setWithdrawMethod] = useState("MTN Mobile Money");
-  const [withdrawAccount, setWithdrawAccount] = useState(profile.phone || "");
+  const [withdrawNetwork, setWithdrawNetwork] = useState("MTN");
+  const [withdrawing, setWithdrawing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (authReady && !isLoggedIn) {
       void navigate({ to: "/auth", search: { redirect: "/profile" } });
     }
-  }, [isLoggedIn, navigate]);
+  }, [authReady, isLoggedIn, navigate]);
 
-  const handleWithdraw = (e: React.FormEvent) => {
+  const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!withdrawAmount || withdrawAmount <= 0) {
+      toast.error("Enter an amount to withdraw.");
+      return;
+    }
     if (withdrawAmount > balance) {
       toast.error("Insufficient balance for withdrawal!");
       return;
     }
-    const success = withdraw(withdrawAmount, withdrawMethod, withdrawAccount || profile.phone);
-    if (success) {
-      toast.success(`Withdrawal of GHS ${withdrawAmount.toFixed(2)} initiated successfully!`);
-      setWithdrawOpen(false);
-    } else {
-      toast.error("Withdrawal failed due to insufficient funds.");
+    setWithdrawing(true);
+    try {
+      const res = await withdraw(withdrawAmount, withdrawNetwork);
+      if (res.status === "FAILED") {
+        toast.error("The provider rejected this withdrawal. Your balance has been refunded.");
+      } else if (res.status === "RESERVED") {
+        toast.info("Withdrawal received — we are confirming it with the provider. Check back shortly.");
+        setWithdrawOpen(false);
+      } else {
+        toast.success(`GHS ${withdrawAmount.toFixed(2)} is on its way to ${profile.phone}.`);
+        setWithdrawOpen(false);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Withdrawal failed. Please try again.");
+    } finally {
+      setWithdrawing(false);
     }
   };
 
-  const handleSignOut = () => {
-    logout();
+  const handleSignOut = async () => {
+    await logout();
     toast.info("Signed out of BETRIX account");
     void navigate({ to: "/auth" });
   };
@@ -107,26 +121,24 @@ function ProfilePage() {
           </DialogHeader>
           <form onSubmit={handleWithdraw} className="space-y-4 pt-2">
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Method</label>
+              <label htmlFor="withdraw-network" className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mobile money network</label>
               <select
-                value={withdrawMethod}
-                onChange={(e) => setWithdrawMethod(e.target.value)}
+                id="withdraw-network"
+                value={withdrawNetwork}
+                onChange={(e) => setWithdrawNetwork(e.target.value)}
                 className="w-full bg-[#252147] border-[#332E5E] text-white font-bold text-xs h-10 rounded-xl px-3 focus:outline-none focus:border-[#FFC82C]"
               >
-                <option value="MTN Mobile Money">MTN Mobile Money</option>
-                <option value="Telecel Cash">Telecel Cash (Vodafone)</option>
-                <option value="AT Money">AT Money (AirtelTigo)</option>
-                <option value="Bank Account">Direct Bank Transfer</option>
+                <option value="MTN">MTN Mobile Money</option>
+                <option value="TELECEL">Telecel Cash (Vodafone)</option>
+                <option value="AIRTELTIGO">AT Money (AirtelTigo)</option>
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Mobile Number / Account</label>
-              <Input
-                type="text"
-                value={withdrawAccount}
-                onChange={(e) => setWithdrawAccount(e.target.value)}
-                className="bg-[#252147] border-[#332E5E] text-white font-mono text-sm font-bold h-10 rounded-xl focus:border-[#FFC82C]"
-              />
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Paid to</span>
+              <p className="bg-[#252147] border border-[#332E5E] text-white font-mono text-sm font-bold h-10 rounded-xl px-3 flex items-center">
+                {profile.phone}
+              </p>
+              <p className="text-[10px] text-gray-400">For your security, withdrawals only go to your registered number.</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">Withdrawal Amount (GHS)</label>
@@ -141,8 +153,8 @@ function ProfilePage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="w-full bg-[#FFC82C] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-md">
-              Submit Instant Cash Out
+            <Button type="submit" disabled={withdrawing} className="w-full bg-[#FFC82C] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-md">
+              {withdrawing ? "Sending…" : "Withdraw"}
             </Button>
           </form>
         </DialogContent>

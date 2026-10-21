@@ -1,212 +1,68 @@
 /**
- * SeevPlus Payment Gateway Client Service
- * --------------------------------------
- * Provides client-side helpers to initialize checkout sessions and
- * verify payments via the SeevPlus developer gateway (/api/seevplus/*).
+ * Browser helpers for our /api/* routes. Every call carries the user's Supabase
+ * access token; the server decides balances, odds and payment outcomes.
  */
+import { supabase } from "@/integrations/supabase/client";
 
-export interface SeevPaymentInitParams {
-  amount: number; // in Cedis (GHS)
-  currency?: "GHS" | "USD";
-  phone: string;
-  name?: string;
-  email?: string;
-  method?: string;
-  subaccount?: string;
-  redirectUrl?: string;
-  metadata?: Record<string, unknown>;
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public data: any,
+  ) {
+    super(message);
+  }
 }
 
-export interface SeevPaymentInitResult {
-  success: boolean;
-  paymentId?: string;
-  checkoutUrl?: string;
-  reference: string;
-  isSandbox?: boolean;
-  error?: string;
-}
-
-export interface SeevPaymentVerifyResult {
-  verified: boolean;
-  status: "succeeded" | "failed" | "pending" | "unknown";
-  amount?: number;
-  currency?: string;
-  reference?: string;
-  error?: string;
-}
-
-/**
- * Initialize a checkout session with SeevPlus
- */
-export async function createSeevCheckout(
-  params: SeevPaymentInitParams
-): Promise<SeevPaymentInitResult> {
-  const generatedRef = `SEEV-${params.currency || "GHS"}-${Math.round(params.amount)}-${Date.now().toString(36).toUpperCase()}`;
-
+export async function apiPost<T = any>(path: string, body: unknown = {}): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  let res: Response;
   try {
-    const response = await fetch("/api/seevplus/checkout", {
+    res = await fetch(path, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({
-        amount: params.amount,
-        currency: params.currency || "GHS",
-        phone: params.phone,
-        name: params.name || "Betrix User",
-        email: params.email || `user.${params.phone.replace(/\D/g, "")}@betrix.hub`,
-        reference: generatedRef,
-        method: params.method || "MoMo",
-        subaccount: params.subaccount,
-        redirectUrl:
-          params.redirectUrl ||
-          (typeof window !== "undefined"
-            ? `${window.location.origin}/points?gateway=seevplus&ref=${generatedRef}`
-            : undefined),
-        metadata: {
-          ...params.metadata,
-          source: "betrix_sportsbook",
-          phone: params.phone,
-          timestamp: new Date().toISOString(),
-        },
-      }),
+      body: JSON.stringify(body),
     });
-
-    let data: any = null;
-    try {
-      data = await response.json();
-    } catch {}
-
-    if (!response.ok || !data?.success) {
-      return {
-        success: false,
-        reference: generatedRef,
-        error: data?.error || (response.status === 404 ? "Gateway endpoint unavailable (404)" : `Gateway returned status ${response.status}`),
-        isSandbox: data?.isSandbox,
-      };
-    }
-
-    return {
-      success: true,
-      paymentId: data.paymentId,
-      checkoutUrl: data.checkoutUrl,
-      reference: data.reference || generatedRef,
-      isSandbox: data.isSandbox,
-    };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Failed to connect to SeevPlus gateway";
-    return {
-      success: false,
-      reference: generatedRef,
-      error: msg,
-    };
+  } catch {
+    throw new ApiError(0, "Network error. Check your connection and try again.", null);
   }
-}
-
-export interface SeevPayoutParams {
-  amount: number; // in GHS
-  currency?: "GHS" | "USD";
-  phone: string;
-  accountName?: string;
-  method?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface SeevPayoutResult {
-  success: boolean;
-  payoutId?: string;
-  reference?: string;
-  status?: string;
-  error?: string;
-}
-
-/**
- * Initiate a real payout (withdrawal) via SeevPlus
- */
-export async function createSeevPayout(
-  params: SeevPayoutParams
-): Promise<SeevPayoutResult> {
-  try {
-    const response = await fetch("/api/seevplus/payout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: params.amount,
-        currency: params.currency || "GHS",
-        phone: params.phone,
-        accountName: params.accountName || "Betrix User",
-        method: params.method || "Mobile Money",
-        metadata: {
-          ...params.metadata,
-          source: "betrix_sportsbook_withdrawal",
-          phone: params.phone,
-          timestamp: new Date().toISOString(),
-        },
-      }),
-    });
-
-    let data: any = null;
-    try {
-      data = await response.json();
-    } catch {}
-
-    if (!response.ok || !data?.success) {
-      return {
-        success: false,
-        error: data?.error || (response.status === 404 ? "Payout endpoint unavailable (404)" : `Payout gateway returned status ${response.status}`),
-      };
-    }
-
-    return {
-      success: true,
-      payoutId: data.payoutId,
-      reference: data.reference,
-      status: data.status || "pending",
-    };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Failed to connect to SeevPlus payout gateway";
-    return { success: false, error: msg };
+  const json: any = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiError(res.status, json?.error || `Request failed (${res.status})`, json);
   }
+  return json as T;
 }
 
-/**
- * Verify a SeevPlus transaction status by ID or Reference
- */
-export async function verifySeevPayment(
-  paymentId?: string,
-  reference?: string
-): Promise<SeevPaymentVerifyResult> {
-  try {
-    const params = new URLSearchParams();
-    if (paymentId) params.set("paymentId", paymentId);
-    if (reference) params.set("ref", reference);
-
-    const response = await fetch(`/api/seevplus/verify?${params.toString()}`);
-    let data: any = null;
-    try {
-      data = await response.json();
-    } catch {}
-
-    if (!response.ok) {
-      return {
-        verified: false,
-        status: "failed",
-        error: data?.error || (response.status === 404 ? "Verify endpoint unavailable (404)" : "Verification failed"),
-      };
-    }
-
-    return {
-      verified: data.verified === true,
-      status: data.status || (data.verified ? "succeeded" : "pending"),
-      amount: data.amount,
-      currency: data.currency,
-      reference: data.reference || reference,
-    };
-  } catch (err: unknown) {
-    return {
-      verified: false,
-      status: "unknown",
-      error: err instanceof Error ? err.message : "Error contacting verification server",
-    };
-  }
+export interface CheckoutResult {
+  checkoutUrl: string;
+  reference: string;
+  orderId: string;
 }
+
+export const startSeevCheckout = (amount: number) =>
+  apiPost<CheckoutResult>("/api/seevplus/checkout", { amount });
+
+export interface VerifyResult {
+  status: "PENDING" | "CREDITED" | "FAILED";
+  amount: number;
+  balance: number;
+}
+
+export const verifySeevPayment = (ref: { orderId?: string; reference?: string }) =>
+  apiPost<VerifyResult>("/api/seevplus/verify", ref);
+
+export interface WithdrawResult {
+  id: string;
+  status: "RESERVED" | "PROCESSING" | "COMPLETED" | "FAILED";
+  amount: number;
+  balance: number;
+}
+
+export const requestSeevPayout = (amount: number, network: string) =>
+  apiPost<WithdrawResult>("/api/seevplus/payout", { amount, network });
+
+export const refreshSeevWallet = () => apiPost<{ balance: number }>("/api/seevplus/refresh");

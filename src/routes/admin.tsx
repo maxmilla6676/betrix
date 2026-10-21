@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { GHANA_TZ } from "@/lib/ghana-time";
 import {
   Activity,
@@ -31,7 +31,6 @@ import {
   Menu,
   CreditCard,
   Plus,
-  RotateCcw,
   Trophy,
   ShieldAlert,
   LogIn,
@@ -96,7 +95,9 @@ function AdminPage() {
 
   const {
     isLoggedIn,
+    authReady,
     isAdmin,
+    platformTransactions,
     profile,
     refreshProfile,
     totalRevenue,
@@ -106,7 +107,6 @@ function AdminPage() {
     totalUsersCount,
     activeAnalysesCount,
     pendingPaymentsCount,
-    transactions,
     history,
 
     partnersList,
@@ -123,6 +123,22 @@ function AdminPage() {
     enableLiveApi,
     setEnableLiveApi,
   } = useBetrix();
+
+  const transactions = platformTransactions.filter((t) => t.type === "DEPOSIT");
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    setLoadingProfiles(true);
+    fetchAllProfilesFromBackend()
+      .then(setSupabaseProfiles)
+      .finally(() => setLoadingProfiles(false));
+  }, [isAdmin]);
+
+  if (!authReady) {
+    return (
+      <div className="min-h-screen bg-[#0e0e11] text-gray-400 flex items-center justify-center text-sm">Loading…</div>
+    );
+  }
 
   // ── Protection Gate 1: Not Logged In ──
   if (!isLoggedIn) {
@@ -283,9 +299,6 @@ function AdminPage() {
     setLoadingProfiles(false);
   };
 
-  useEffect(() => {
-    loadProfiles();
-  }, []);
 
   const handleToggleRole = async (phone: string, currentRole: string) => {
     const newRole = currentRole === "ADMIN" ? "USER" : "ADMIN";
@@ -557,17 +570,6 @@ function AdminPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleResetStats}
-                    className="h-8 text-xs font-bold text-[#E41B23] border-[#E41B23]/30 hover:bg-[#E41B23]/10 hover:text-red-400"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 mr-1" />
-                    Reset All to GH₵0
-                  </Button>
-
                   <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-emerald-400 text-xs font-bold">
                     <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
                     <span>SeevPlus MoMo Gateway Active</span>
@@ -853,7 +855,7 @@ function AdminPage() {
                       <Trophy className="h-4 w-4 text-[#E41B23]" /> Match & League Manager
                     </h3>
                     <p className="text-xs text-gray-400">
-                      Add custom leagues and matches with logos, kickoff times, and predetermined outcomes.
+                      Add custom leagues and matches with logos, kickoff times and real final scores.
                     </p>
                   </div>
                   <Button size="sm" onClick={() => fetchApiMatches()} disabled={isApiLoading}

@@ -20,6 +20,7 @@ export interface League {
   color: string;
   sportId: string;
   active: boolean;
+  logo?: string | undefined;
 }
 
 export interface Team {
@@ -31,7 +32,7 @@ export interface Team {
   color: string;
   /** Simple form string, most recent first */
   form: string[];
-  logo?: string;
+  logo?: string | undefined;
 }
 
 export interface MarketOption {
@@ -62,6 +63,10 @@ export interface Match {
   venue: string;
   hot: boolean;
   markets: Market[];
+  /** ESPN scoreboard source id (e.g. "eng.1") — lets the server re-fetch this event. */
+  sourceId?: string | undefined;
+  /** ESPN `dates=` value (YYYYMMDD) the event was fetched with. */
+  espnDate?: string | undefined;
 }
 
 export const sports: Sport[] = [

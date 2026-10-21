@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Bookmark,
@@ -52,10 +52,8 @@ function HistoryPage() {
   const {
     history,
     isLoggedIn,
-    deposit,
     balance,
     loadSlip,
-    toggleCashoutAvailable,
   } = useBetrix();
 
 
@@ -89,7 +87,7 @@ function HistoryPage() {
     }
   };
 
-  const [cashedOutCodes, setCashedOutCodes] = useState<Record<string, number>>({});
+  const cashedOutCodes: Record<string, number> = {};
   const [codesAccordionOpen, setCodesAccordionOpen] = useState(true);
   const [expandedCodeIds, setExpandedCodeIds] = useState<Record<string, boolean>>({});
   const [cashoutModalOpen, setCashoutModalOpen] = useState(false);
@@ -158,11 +156,9 @@ function HistoryPage() {
     return openBets;
   }, [openBets, subFilter]);
 
-  const handleCashout = (code: string, stake: number, selectionsCount: number) => {
-    const cashoutValue = Math.round(stake * (1.35 + selectionsCount * 0.4));
-    setCashedOutCodes((prev) => ({ ...prev, [code]: cashoutValue }));
-    deposit(cashoutValue);
-    toast.success(`Bet ${code} cashed out for +${formatGHS(cashoutValue)}!`);
+  // Cashout needs server-side pricing; until then no bet is ever marked cashout-available.
+  const handleCashout = (code: string, _stake: number, _selectionsCount: number) => {
+    toast.info(`Cashout is not available for ${code} yet.`);
   };
 
   const handleCopyCode = (codeStr: string) => {
@@ -189,11 +185,6 @@ function HistoryPage() {
     } else {
       toast.info(`Selections loaded for rebet!`);
     }
-  };
-
-  const handleSimulateBet = (code: string) => {
-    toggleCashoutAvailable(code);
-    toast.info(`Toggled cashout availability for ${code}!`);
   };
 
   const handleShareCode = (slip: HistoryEntry) => {

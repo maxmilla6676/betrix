@@ -1,29 +1,15 @@
 import { useState, useMemo } from "react";
 import {
   Plus, Trash2, Trophy, Calendar, Clock, ChevronDown,
-  Shield, Check, Globe, AlertCircle, RefreshCw, Play, CheckCircle2,
+  Check, Globe, AlertCircle, Play, CheckCircle2, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useBetrix } from "@/store/betrix";
-import { leagues as defaultLeagues, type League } from "@/data/football";
+import { leagues as defaultLeagues } from "@/data/football";
 import type { AdminLeague, AdminMatch } from "@/data/adminMatches";
-
-const OUTCOME_LABELS: Record<string, string> = {
-  home: "Home Win",
-  draw: "Draw",
-  away: "Away Win",
-  score: "Exact Score",
-};
-
-const OUTCOME_COLORS: Record<string, string> = {
-  home: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  draw: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  away: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  score: "bg-[#F5C400]/15 text-[#F5C400] border-[#F5C400]/30",
-};
 
 function makeId() {
   return `adm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -40,7 +26,10 @@ function LeagueForm({ onAdd }: { onAdd: (l: AdminLeague) => void }) {
   const [logoUrl, setLogoUrl] = useState("");
 
   const handleAdd = () => {
-    if (!name.trim()) return toast.error("League name is required.");
+    if (!name.trim()) {
+      toast.error("League name is required.");
+      return;
+    }
     onAdd({
       id: makeId(),
       name: name.trim(),
@@ -106,7 +95,7 @@ interface SelectableLeague {
   id: string;
   name: string;
   color: string;
-  logoUrl?: string;
+  logoUrl?: string | undefined;
 }
 
 function MatchForm({
@@ -123,22 +112,22 @@ function MatchForm({
   const [awayLogoUrl, setAwayLogoUrl] = useState("");
   const [kickoffDate, setKickoffDate] = useState(todayStr());
   const [kickoffTime, setKickoffTime] = useState("15:00");
-  const [outcome, setOutcome] = useState<"home" | "draw" | "away" | "score">("home");
-  const [outcomeScore, setOutcomeScore] = useState("2:1");
-  const [status, setStatus] = useState<"scheduled" | "live" | "finished">("scheduled");
   const [showLeagueDropdown, setShowLeagueDropdown] = useState(false);
 
   const selectedLeague = availableLeagues.find((l) => l.id === leagueId) || availableLeagues[0];
 
   const handleAdd = () => {
     if (!homeTeam.trim() || !awayTeam.trim()) {
-      return toast.error("Both home and away team names are required.");
+      toast.error("Both home and away team names are required.");
+      return;
     }
     if (!selectedLeague) {
-      return toast.error("Please select a league.");
+      toast.error("Please select a league.");
+      return;
     }
-    if (outcome === "score" && !/^\d+:\d+$/.test(outcomeScore.trim())) {
-      return toast.error("Score format must be like '2:1'.");
+    if (new Date(`${kickoffDate}T${kickoffTime}:00.000Z`).getTime() <= Date.now()) {
+      toast.error("Kickoff must be in the future (Ghana time).");
+      return;
     }
 
     onAdd({
@@ -150,9 +139,7 @@ function MatchForm({
       awayLogoUrl: awayLogoUrl.trim() || undefined,
       kickoffDate,
       kickoffTime,
-      outcome,
-      outcomeScore: outcomeScore.trim() || (outcome === "home" ? "2:1" : outcome === "draw" ? "1:1" : "0:2"),
-      status,
+      status: "scheduled",
       createdAt: new Date().toISOString(),
     });
 
@@ -277,71 +264,10 @@ function MatchForm({
         </div>
       </div>
 
-      {/* Predetermined Outcome & Exact Score */}
-      <div className="space-y-2">
-        <label className={`${labelCls} flex items-center gap-1`}>
-          <Shield className="h-3 w-3 text-[#E41B23]" /> Predetermined Outcome (Will end as specified)
-        </label>
-        <div className="grid grid-cols-4 gap-1.5">
-          {(["home", "draw", "away", "score"] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setOutcome(opt)}
-              className={cn(
-                "py-1.5 rounded-lg text-[10px] font-black border transition-all",
-                outcome === opt
-                  ? "bg-[#E41B23] text-white border-[#E41B23]"
-                  : "bg-[#121216] text-gray-400 border-[#2a2a35] hover:border-[#F5C400]/30 hover:text-gray-200"
-              )}
-            >
-              {OUTCOME_LABELS[opt]}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 bg-[#121216] p-2 rounded-xl border border-[#2a2a35]">
-          <label className="text-xs text-gray-300 font-bold whitespace-nowrap">Target Final Score:</label>
-          <Input
-            placeholder="e.g. 2:1"
-            value={outcomeScore}
-            onChange={(e) => setOutcomeScore(e.target.value)}
-            className="text-xs bg-[#1e1e26] border-[#2a2a35] text-white max-w-[80px] text-center font-mono font-bold"
-          />
-          <span className="text-[10px] text-gray-400">
-            {outcome === "home" && "(Home goals > Away goals)"}
-            {outcome === "draw" && "(Scores are level)"}
-            {outcome === "away" && "(Away goals > Home goals)"}
-            {outcome === "score" && "(Exact final score at 90')"}
-          </span>
-        </div>
-      </div>
-
-      {/* Status Mode */}
-      <div className="space-y-1.5">
-        <label className={labelCls}>Status Simulation Mode</label>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { id: "scheduled", label: "⏱ Time-Based (Auto)" },
-            { id: "live", label: "⚡ Force Live Now" },
-            { id: "finished", label: "✓ Force Finished" },
-          ].map((st) => (
-            <button
-              key={st.id}
-              type="button"
-              onClick={() => setStatus(st.id as any)}
-              className={cn(
-                "py-1.5 rounded-lg text-[10px] font-black border transition-all",
-                status === st.id
-                  ? "bg-[#F5C400] text-black border-[#F5C400]"
-                  : "bg-[#121216] text-gray-400 border-[#2a2a35] hover:text-gray-200"
-              )}
-            >
-              {st.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <p className="text-[10px] text-gray-400">
+        Odds are generated automatically. After full time, open <strong className="text-gray-200">Platform Matches</strong> and
+        enter the real final score to settle bets.
+      </p>
 
       <Button
         type="button"
@@ -354,18 +280,44 @@ function MatchForm({
   );
 }
 
+function FinishMatchForm({ match, onFinish }: { match: AdminMatch; onFinish: (h: number, a: number) => void }) {
+  const [home, setHome] = useState(match.homeScore?.toString() ?? "");
+  const [away, setAway] = useState(match.awayScore?.toString() ?? "");
+  const submit = () => {
+    const h = Number(home);
+    const a = Number(away);
+    if (!/^\d{1,2}$/.test(home) || !/^\d{1,2}$/.test(away)) {
+      toast.error("Enter the real final score for both teams.");
+      return;
+    }
+    if (!confirm(`Confirm final score ${match.homeTeam} ${h} – ${a} ${match.awayTeam}? Bets will be settled on this result.`)) return;
+    onFinish(h, a);
+  };
+  return (
+    <div className="flex items-center gap-1.5 pt-1">
+      <Input value={home} onChange={(e) => setHome(e.target.value)} placeholder="H" className="h-7 w-12 text-center text-xs bg-[#121216] border-[#2a2a35] text-white" />
+      <span className="text-gray-500 text-xs">–</span>
+      <Input value={away} onChange={(e) => setAway(e.target.value)} placeholder="A" className="h-7 w-12 text-center text-xs bg-[#121216] border-[#2a2a35] text-white" />
+      <Button type="button" onClick={submit} className="h-7 px-2 text-[10px] font-black bg-emerald-600 hover:bg-emerald-700 text-white">
+        Save final score
+      </Button>
+    </div>
+  );
+}
+
 function MatchList({
   matches,
   availableLeagues,
   onDelete,
-  onToggleStatus,
+  onUpdate,
 }: {
   matches: AdminMatch[];
   availableLeagues: SelectableLeague[];
   onDelete: (id: string) => void;
-  onToggleStatus: (id: string) => void;
+  onUpdate: (m: Partial<AdminMatch> & { id: string }) => void;
 }) {
   const leagueMap = Object.fromEntries(availableLeagues.map((l) => [l.id, l]));
+  const [finishingId, setFinishingId] = useState<string | null>(null);
 
   const sorted = [...matches].sort((a, b) =>
     new Date(`${a.kickoffDate}T${a.kickoffTime}:00.000Z`).getTime() -
@@ -385,16 +337,8 @@ function MatchList({
     <div className="space-y-2">
       {sorted.map((m) => {
         const league = leagueMap[m.leagueId];
-        const kickoff = new Date(`${m.kickoffDate}T${m.kickoffTime}:00.000Z`);
-        const now = new Date();
-        const isPast = kickoff.getTime() + 105 * 60 * 1000 <= now.getTime();
-        const isLiveTime = kickoff <= now && !isPast;
-
-        const effectiveStatus = m.status === "finished" ? "finished"
-          : m.status === "live" ? "live"
-          : isPast ? "finished"
-          : isLiveTime ? "live"
-          : "scheduled";
+        const kickedOff = new Date(`${m.kickoffDate}T${m.kickoffTime}:00.000Z`).getTime() <= Date.now();
+        const hasScore = typeof m.homeScore === "number" && typeof m.awayScore === "number";
 
         return (
           <div
@@ -424,7 +368,9 @@ function MatchList({
                   <img src={m.homeLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
                 ) : null}
                 <span className="truncate">{m.homeTeam}</span>
-                <span className="text-gray-500 text-xs font-normal">vs</span>
+                <span className="text-gray-500 text-xs font-normal">
+                  {hasScore ? `${m.homeScore} – ${m.awayScore}` : "vs"}
+                </span>
                 {m.awayLogoUrl ? (
                   <img src={m.awayLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
                 ) : null}
@@ -432,37 +378,36 @@ function MatchList({
               </div>
 
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full border", OUTCOME_COLORS[m.outcome])}>
-                  Target: {m.outcomeScore || OUTCOME_LABELS[m.outcome]}
-                </span>
-
                 <span
                   className={cn(
                     "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
-                    effectiveStatus === "finished"
+                    m.status === "finished"
                       ? "bg-gray-700/50 text-gray-300 border border-gray-600/30"
-                      : effectiveStatus === "live"
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse"
-                      : "bg-blue-500/15 text-blue-400 border border-blue-500/30"
+                      : m.status === "cancelled"
+                        ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                        : m.status === "live"
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse"
+                          : "bg-blue-500/15 text-blue-400 border border-blue-500/30"
                   )}
                 >
-                  {effectiveStatus === "finished" && (
-                    <>
-                      <CheckCircle2 className="h-3 w-3 text-gray-400" /> Finished ({m.outcomeScore})
-                    </>
-                  )}
-                  {effectiveStatus === "live" && (
-                    <>
-                      <Play className="h-3 w-3 text-emerald-400" /> In-Play Live
-                    </>
-                  )}
-                  {effectiveStatus === "scheduled" && (
-                    <>
-                      <Clock className="h-3 w-3 text-blue-400" /> Scheduled for stated time
-                    </>
+                  {m.status === "finished" && (<><CheckCircle2 className="h-3 w-3" /> Finished</>)}
+                  {m.status === "cancelled" && (<><XCircle className="h-3 w-3" /> Cancelled — bets void</>)}
+                  {m.status === "live" && (<><Play className="h-3 w-3" /> Live</>)}
+                  {m.status === "scheduled" && (
+                    <><Clock className="h-3 w-3" /> {kickedOff ? "Kicked off — betting closed" : "Scheduled"}</>
                   )}
                 </span>
               </div>
+
+              {finishingId === m.id && m.status !== "finished" && (
+                <FinishMatchForm
+                  match={m}
+                  onFinish={(homeScore, awayScore) => {
+                    onUpdate({ id: m.id, status: "finished", homeScore, awayScore });
+                    setFinishingId(null);
+                  }}
+                />
+              )}
             </div>
 
             <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -470,9 +415,8 @@ function MatchList({
                 type="button"
                 title="Delete Match"
                 onClick={() => {
-                  if (confirm(`Delete "${m.homeTeam} vs ${m.awayTeam}"?`)) {
+                  if (confirm(`Delete "${m.homeTeam} vs ${m.awayTeam}"? Pending bets on it will be voided after 7 days.`)) {
                     onDelete(m.id);
-                    toast.success("Match deleted from platform.");
                   }
                 }}
                 className="p-1.5 rounded-lg text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23] transition-colors"
@@ -480,14 +424,39 @@ function MatchList({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
 
-              <button
-                type="button"
-                title="Cycle Status (Scheduled -> Live -> Finished)"
-                onClick={() => onToggleStatus(m.id)}
-                className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white hover:border-[#F5C400]/40 transition-colors flex items-center gap-1"
-              >
-                <RefreshCw className="h-2.5 w-2.5" /> Switch
-              </button>
+              {m.status === "scheduled" && kickedOff && (
+                <button
+                  type="button"
+                  onClick={() => onUpdate({ id: m.id, status: "live" })}
+                  className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors"
+                >
+                  Mark live
+                </button>
+              )}
+              {(m.status === "scheduled" || m.status === "live") && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setFinishingId(finishingId === m.id ? null : m.id)}
+                    disabled={!kickedOff}
+                    title={kickedOff ? "Enter the final score" : "Available after kickoff"}
+                    className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors disabled:opacity-40"
+                  >
+                    Finish…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`Cancel "${m.homeTeam} vs ${m.awayTeam}"? All bets on it will be voided and refunded.`)) {
+                        onUpdate({ id: m.id, status: "cancelled" });
+                      }
+                    }}
+                    className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-red-400/80 hover:text-red-400 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </>
+              )}
             </div>
           </div>
         );
@@ -501,13 +470,14 @@ export function AdminMatchManager() {
     adminLeagues,
     adminMatches,
     addAdminLeague,
-    deleteAdminLeague,
     addAdminMatch,
     deleteAdminMatch,
     updateAdminMatch,
+    settleNow,
   } = useBetrix();
 
   const [view, setView] = useState<"matches" | "leagues" | "list">("matches");
+  const [settling, setSettling] = useState(false);
 
   // Combined list of custom admin leagues + standard sports leagues
   const availableLeagues: SelectableLeague[] = useMemo(() => {
@@ -521,27 +491,36 @@ export function AdminMatchManager() {
       id: l.id,
       name: l.name,
       color: l.color,
-      logoUrl: (l as any).logo,
+      logoUrl: l.logo,
     }));
     return [...custom, ...defaults];
   }, [adminLeagues]);
 
-  const handleAddLeague = (l: AdminLeague) => {
-    addAdminLeague(l);
+  const handleAddLeague = async (l: AdminLeague) => {
+    await addAdminLeague(l);
     setView("matches");
   };
 
-  const handleAddMatch = (m: AdminMatch) => {
-    addAdminMatch(m);
+  const handleAddMatch = async (m: AdminMatch) => {
+    await addAdminMatch(m);
     setView("list");
   };
 
-  const handleToggleStatus = (id: string) => {
-    const match = adminMatches.find((m) => m.id === id);
-    if (!match) return;
-    const nextStatus = match.status === "scheduled" ? "live" : match.status === "live" ? "finished" : "scheduled";
-    updateAdminMatch({ id, status: nextStatus });
-    toast.info(`Match status set to ${nextStatus.toUpperCase()}`);
+  const handleUpdate = async (m: Partial<AdminMatch> & { id: string }) => {
+    await updateAdminMatch(m);
+    if (m.status === "finished" || m.status === "cancelled") {
+      setSettling(true);
+      try {
+        const n = await settleNow("all");
+        toast.success(`Match updated. ${n} bet slip(s) settled.`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Settlement failed — try again from the list.");
+      } finally {
+        setSettling(false);
+      }
+    } else {
+      toast.success("Match updated.");
+    }
   };
 
   return (
@@ -565,6 +544,25 @@ export function AdminMatchManager() {
             {tab === "leagues" && `Custom Leagues (${adminLeagues.length})`}
           </button>
         ))}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={settling}
+          onClick={async () => {
+            setSettling(true);
+            try {
+              const n = await settleNow("all");
+              toast.success(`${n} bet slip(s) settled.`);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Settlement failed.");
+            } finally {
+              setSettling(false);
+            }
+          }}
+          className="ml-auto h-8 text-xs font-bold border-[#2a2a35] bg-[#1e1e26] text-gray-300 hover:text-white"
+        >
+          {settling ? "Settling…" : "Settle finished bets"}
+        </Button>
       </div>
 
       {view === "matches" && (
@@ -576,7 +574,7 @@ export function AdminMatchManager() {
           matches={adminMatches}
           availableLeagues={availableLeagues}
           onDelete={deleteAdminMatch}
-          onToggleStatus={handleToggleStatus}
+          onUpdate={handleUpdate}
         />
       )}
 
@@ -585,7 +583,10 @@ export function AdminMatchManager() {
       <div className="text-[11px] text-gray-400 bg-[#1e1e26] border border-[#2a2a35] rounded-xl p-3 flex items-start gap-2.5">
         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#F5C400]" />
         <div>
-          <span className="font-bold text-white">How match automation works:</span> Matches appear on the platform at the stated date and kickoff time. When the scheduled time arrives, the match turns <span className="text-emerald-400 font-bold">LIVE</span> and simulates progress towards the predetermined outcome. At the end (90'), it marks as <span className="text-gray-300 font-bold">FINISHED</span> with your exact target score.
+          <span className="font-bold text-white">How platform matches work:</span> Matches open for betting until the
+          stated kickoff time (Ghana GMT), then betting closes automatically. After the game, use{" "}
+          <span className="text-gray-200 font-bold">Finish…</span> to enter the real final score — bets settle on that
+          result. <span className="text-gray-200 font-bold">Cancel</span> voids every bet and refunds the stakes.
         </div>
       </div>
     </div>

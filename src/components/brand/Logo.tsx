@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 interface LogoProps {
-  className?: string;
+  className?: string | undefined;
   size?: "sm" | "md" | "lg";
   showText?: boolean;
 }

@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BetrixLogo } from "@/components/brand/Logo";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
-import { registerUserInBackend, authenticateUserInBackend } from "@/services/backendSync";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -22,7 +21,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const { login } = useBetrix();
+  const { login, register } = useBetrix();
   const search = useSearch({ strict: false }) as { mode?: string; redirect?: string; ref?: string };
   const defaultTab = search?.mode === "signup" || search?.ref ? "signup" : "signin";
 
@@ -58,24 +57,10 @@ function AuthPage() {
     setLoading(mode);
     try {
       if (mode === "signup") {
-        const res = await registerUserInBackend(phone.trim(), password, referralCode.trim() || undefined);
-        if (!res.success) {
-          toast.error(res.error || "Failed to create account.");
-          return;
-        }
-        login(res.profile.phone, referralCode.trim() || undefined, res.profile);
-        toast.success(
-          referralCode.trim()
-            ? `Account created! Partner referral ${referralCode.trim().toUpperCase()} applied.`
-            : "Account created successfully!"
-        );
+        await register(phone.trim(), password, referralCode.trim() || undefined);
+        toast.success("Account created successfully!");
       } else {
-        const res = await authenticateUserInBackend(phone.trim(), password);
-        if (!res.success) {
-          toast.error(res.error || "Authentication failed.");
-          return;
-        }
-        login(res.profile.phone, undefined, res.profile);
+        await login(phone.trim(), password);
         toast.success("Welcome back to BETRIX!");
       }
       void navigate({ to: search?.redirect || "/profile" });

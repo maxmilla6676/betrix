@@ -28,6 +28,8 @@ export interface PartnerRecord {
   audienceSize?: string | undefined;
   appliedAt?: string | undefined;
   notes?: string | undefined;
+  earnings?: number | undefined;
+  createdAt?: string | undefined;
 }
 
 export interface PartnerDepositRecord {
