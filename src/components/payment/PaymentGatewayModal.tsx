@@ -40,7 +40,12 @@ export function PaymentGatewayModal({
   const { profile, deposit } = useBetrix();
   const [method, setMethod] = useState<PaymentMethod>("seevplus");
   const [amount, setAmount] = useState<number>(defaultAmount);
-  const [phone, setPhone] = useState<string>(profile.phone || "0205795789");
+  const [phone, setPhone] = useState<string>(profile.phone || "");
+
+  useEffect(() => {
+    if (profile.phone) setPhone(profile.phone);
+  }, [profile.phone]);
+
 
   // Card details state
   const [cardNumber, setCardNumber] = useState("");

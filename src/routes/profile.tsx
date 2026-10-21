@@ -49,7 +49,7 @@ function ProfilePage() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
   const [withdrawMethod, setWithdrawMethod] = useState("MTN Mobile Money");
-  const [withdrawAccount, setWithdrawAccount] = useState(profile.phone || "0205795789");
+  const [withdrawAccount, setWithdrawAccount] = useState(profile.phone || "");
   const [showBalance, setShowBalance] = useState(true);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ function ProfilePage() {
       toast.error("Insufficient balance for withdrawal!");
       return;
     }
-    const success = withdraw(withdrawAmount, withdrawMethod, withdrawAccount);
+    const success = withdraw(withdrawAmount, withdrawMethod, withdrawAccount || profile.phone);
     if (success) {
       toast.success(`Withdrawal of GHS ${withdrawAmount.toFixed(2)} initiated successfully!`);
       setWithdrawOpen(false);
@@ -88,7 +88,8 @@ function ProfilePage() {
     return null;
   }
 
-  const userPhone = profile.phone || "0205795789";
+  const userPhone = profile.phone || "Account";
+
 
   return (
     <div className="min-h-screen bg-[#121026] text-white p-3 md:p-6 space-y-4 pb-24">

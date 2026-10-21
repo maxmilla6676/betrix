@@ -4,13 +4,25 @@
 CREATE TABLE IF NOT EXISTS public.profiles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id text NOT NULL,
-  phone text NOT NULL,
+  phone text UNIQUE NOT NULL,
+  password_hash text,
   tier text DEFAULT 'Bronze',
   balance numeric DEFAULT 0.00,
   verified boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+-- Ensure columns exist if table was already created
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password_hash text;
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'profiles_phone_key'
+  ) THEN 
+    ALTER TABLE public.profiles ADD CONSTRAINT profiles_phone_key UNIQUE (phone);
+  END IF; 
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.transactions (
   id text PRIMARY KEY,
@@ -86,6 +98,16 @@ CREATE TABLE IF NOT EXISTS public.admin_matches (
   created_at timestamptz DEFAULT now()
 );
 
+-- Grant privileges to anon and authenticated API roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
 -- Enable Row Level Security (RLS) with open public access policies
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
@@ -95,10 +117,23 @@ ALTER TABLE public.partner_deposits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_leagues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_matches ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow public read-write for profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for transactions" ON public.transactions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for slips" ON public.slips FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for partners" ON public.partners FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for partner_deposits" ON public.partner_deposits FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for admin_leagues" ON public.admin_leagues FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public read-write for admin_matches" ON public.admin_matches FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow public read-write for profiles" ON public.profiles;
+CREATE POLICY "Allow public read-write for profiles" ON public.profiles FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for transactions" ON public.transactions;
+CREATE POLICY "Allow public read-write for transactions" ON public.transactions FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for slips" ON public.slips;
+CREATE POLICY "Allow public read-write for slips" ON public.slips FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for partners" ON public.partners;
+CREATE POLICY "Allow public read-write for partners" ON public.partners FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for partner_deposits" ON public.partner_deposits;
+CREATE POLICY "Allow public read-write for partner_deposits" ON public.partner_deposits FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for admin_leagues" ON public.admin_leagues;
+CREATE POLICY "Allow public read-write for admin_leagues" ON public.admin_leagues FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read-write for admin_matches" ON public.admin_matches;
+CREATE POLICY "Allow public read-write for admin_matches" ON public.admin_matches FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);

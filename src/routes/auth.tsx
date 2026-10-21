@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BetrixLogo } from "@/components/brand/Logo";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
+import { registerUserInBackend, authenticateUserInBackend } from "@/services/backendSync";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -36,8 +37,18 @@ function AuthPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [referralCode, setReferralCode] = useState(search?.ref || "");
 
-  const handleSubmit = (mode: "signin" | "signup") => (e: React.FormEvent) => {
+  const handleSubmit = (mode: "signin" | "signup") => async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!phone || phone.trim().length < 9) {
+      toast.error("Please enter a valid Ghana phone number.");
+      return;
+    }
+
+    if (!password || password.trim().length < 6) {
+      toast.error("Password must be at least 6 characters.");
+      return;
+    }
 
     if (mode === "signup" && password !== confirmPassword) {
       toast.error("Passwords do not match!");
@@ -45,19 +56,36 @@ function AuthPage() {
     }
 
     setLoading(mode);
-    setTimeout(() => {
-      setLoading(null);
-      login(phone.trim() || "0205795789", mode === "signup" ? (referralCode.trim() || undefined) : undefined);
-      toast.success(
-        mode === "signin"
-          ? "Welcome back to BETRIX!"
-          : referralCode.trim()
+    try {
+      if (mode === "signup") {
+        const res = await registerUserInBackend(phone.trim(), password, referralCode.trim() || undefined);
+        if (!res.success) {
+          toast.error(res.error || "Failed to create account.");
+          return;
+        }
+        login(res.profile.phone, referralCode.trim() || undefined, res.profile);
+        toast.success(
+          referralCode.trim()
             ? `Account created! Partner referral ${referralCode.trim().toUpperCase()} applied.`
             : "Account created successfully!"
-      );
+        );
+      } else {
+        const res = await authenticateUserInBackend(phone.trim(), password);
+        if (!res.success) {
+          toast.error(res.error || "Authentication failed.");
+          return;
+        }
+        login(res.profile.phone, undefined, res.profile);
+        toast.success("Welcome back to BETRIX!");
+      }
       void navigate({ to: search?.redirect || "/profile" });
-    }, 600);
+    } catch (err: any) {
+      toast.error(err?.message || "An unexpected error occurred.");
+    } finally {
+      setLoading(null);
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-[#0e0e11] text-white flex flex-col justify-center items-center p-4 relative font-sans select-none">

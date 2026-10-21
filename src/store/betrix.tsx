@@ -20,7 +20,11 @@ import {
   syncAdminMatchToBackend,
   deleteAdminMatchFromBackend,
   fetchBackendInitialData,
+  syncUserProfileBalance,
+  fetchUserProfileFromBackend,
+  fetchUserDataFromBackend,
 } from "@/services/backendSync";
+
 
 export type { AdminLeague, AdminMatch };
 export { isMatchLocked };
@@ -130,8 +134,9 @@ interface BetrixState {
   history: HistoryEntry[];
   notifications: AppNotification[];
   isLoggedIn: boolean;
-  login: (phone?: string, referralCode?: string) => void;
+  login: (phone?: string, referralCode?: string, profileData?: any) => void;
   logout: () => void;
+
   toggleSelection: (s: Selection) => void;
   isSelected: (matchId: string, marketId: string, optionId: string) => boolean;
   removeSelection: (matchId: string, marketId: string) => void;
@@ -191,7 +196,29 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const [slip, setSlip] = useState<Selection[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+
+    if (typeof window === "undefined") return false;
+    try {
+      const raw = localStorage.getItem("betrix.state.v7");
+      if (raw) {
+        const p = JSON.parse(raw);
+        return Boolean(p.isLoggedIn && p.phone && p.phone.trim().length > 0);
+      }
+    } catch {}
+    return false;
+  });
+
+  const [profileData, setProfileData] = useState<Profile>(() => ({
+    phone: "",
+    userId: "6939B805",
+    verified: true,
+    tier: "BRONZE I",
+    memberSince: new Date().getFullYear().toString(),
+    status: "Active",
+    nextUpdateDate: "Next Month",
+  }));
+
 
   // Admin Match & League Management
   const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>(() => {
@@ -370,6 +397,24 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
         if (typeof parsed.isLoggedIn === "boolean") setIsLoggedIn(parsed.isLoggedIn);
         if (parsed.dailyRevenueLedger) setDailyRevenueLedger(parsed.dailyRevenueLedger);
+
+        if (parsed.phone && typeof parsed.phone === "string" && parsed.phone.trim().length > 0) {
+          fetchUserProfileFromBackend(parsed.phone).then((uProf) => {
+            if (uProf) {
+              setBalance(uProf.balance);
+              setProfileData((prev) => ({
+                ...prev,
+                ...uProf,
+              }));
+            }
+          });
+          fetchUserDataFromBackend(parsed.phone).then((uData) => {
+            if (uData) {
+              if (uData.transactions && uData.transactions.length > 0) setTransactions(uData.transactions);
+              if (uData.slips && uData.slips.length > 0) setHistory(uData.slips);
+            }
+          });
+        }
       }
     } catch {
       /* ignore corrupted local state */
@@ -378,12 +423,6 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     // 2. Fetch authoritative live data directly from the Supabase backend
     fetchBackendInitialData().then((remote) => {
       if (remote) {
-        if (remote.transactions && remote.transactions.length > 0) {
-          setTransactions(remote.transactions);
-        }
-        if (remote.slips && remote.slips.length > 0) {
-          setHistory(remote.slips);
-        }
         if (remote.partners && remote.partners.length > 0) {
           setPartnersList(remote.partners);
         }
@@ -399,6 +438,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       }
     });
   }, []);
+
 
 
   useEffect(() => {
@@ -734,21 +774,56 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const login = useCallback((userPhone?: string, referralCode?: string) => {
+  const login = useCallback((userPhone?: string, referralCode?: string, extraProfile?: any) => {
     setIsLoggedIn(true);
     if (userPhone && userPhone.trim().length > 0) {
-      setPhone(userPhone.trim());
+      const p = userPhone.trim();
+      setPhone(p);
+      if (extraProfile) {
+        setProfileData((prev) => ({
+          ...prev,
+          phone: p,
+          userId: extraProfile.userId || prev.userId,
+          tier: extraProfile.tier || prev.tier,
+          memberSince: extraProfile.memberSince || prev.memberSince,
+        }));
+        if (typeof extraProfile.balance === "number") {
+          setBalance(extraProfile.balance);
+        }
+      }
+      // Load user transactions and slips from Supabase
+      fetchUserDataFromBackend(p).then((res) => {
+        if (res) {
+          if (res.transactions && res.transactions.length > 0) setTransactions(res.transactions);
+          if (res.slips && res.slips.length > 0) setHistory(res.slips);
+        }
+      });
     }
     if (referralCode && referralCode.trim().length > 0) {
       const code = referralCode.trim().toUpperCase();
       setReferredByPartner(code);
       setPartnersList((prev) =>
-        prev.map((p) => (p.code.toUpperCase() === code ? { ...p, signups: p.signups + 1 } : p))
+        prev.map((p) => {
+          if (p.code.toUpperCase() === code) {
+            const u = { ...p, signups: p.signups + 1 };
+            syncPartnerToBackend(u);
+            return u;
+          }
+          return p;
+        })
       );
     }
   }, []);
 
-  const logout = useCallback(() => setIsLoggedIn(false), []);
+  const logout = useCallback(() => {
+    setIsLoggedIn(false);
+    setPhone("");
+    setBalance(0);
+    setSlip([]);
+    setTransactions([]);
+    setHistory([]);
+  }, []);
+
 
   const toggleSelection = useCallback((s: Selection) => {
     // Check if match has started or finished — lock betting
@@ -822,7 +897,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       };
       setHistory((h) => [entry, ...h]);
       syncSlipToBackend(entry, phone);
-      setBalance((p) => Math.max(0, Number((p - stake).toFixed(2))));
+      setBalance((p) => {
+        const next = Math.max(0, Number((p - stake).toFixed(2)));
+        syncUserProfileBalance(phone, next);
+        return next;
+      });
       const newStakeTx: TransactionRecord = {
         id: `TX-${entry.code}`,
         type: "STAKE",
@@ -849,7 +928,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const deposit = useCallback(
     (amount: number, method = "Mobile Money Gateway", reference?: string) => {
       const ref = reference || `PAY-GHS-${amount}-${Math.floor(1000 + Math.random() * 9000)}`;
-      setBalance((prev) => prev + amount);
+      setBalance((prev) => {
+        const next = Number((prev + amount).toFixed(2));
+        syncUserProfileBalance(phone, next);
+        return next;
+      });
       const newDepTx: TransactionRecord = {
         id: `TX-DEP-${Date.now()}`,
         type: "DEPOSIT",
@@ -902,7 +985,9 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         return prev;
       }
       success = true;
-      return prev - amount;
+      const next = Number((prev - amount).toFixed(2));
+      syncUserProfileBalance(phone, next);
+      return next;
     });
     const ref = `WTH-GHS-${amount}-${Math.floor(1000 + Math.random() * 9000)}`;
     const wthTx: TransactionRecord = {
@@ -937,7 +1022,12 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (outcome === "WON") {
           const settledEntry = { ...entry, status: "WON" as const, payout: potWin };
           syncSlipSettlementToBackend(settledEntry, phone);
-          setBalance((prevBal) => Number((prevBal + potWin).toFixed(2)));
+          setBalance((prevBal) => {
+            const next = Number((prevBal + potWin).toFixed(2));
+            syncUserProfileBalance(phone, next);
+            return next;
+          });
+
           const payoutTx: TransactionRecord = {
             id: `TX-WIN-${entry.code}-${Date.now()}`,
             type: "PAYOUT",
@@ -1016,8 +1106,13 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         settledEntries.forEach((e) => syncSlipSettlementToBackend(e, phone));
 
         if (totalCredited > 0) {
-          setBalance((prevBal) => Number((prevBal + totalCredited).toFixed(2)));
+          setBalance((prevBal) => {
+            const next = Number((prevBal + totalCredited).toFixed(2));
+            syncUserProfileBalance(phone, next);
+            return next;
+          });
           winningEntries.forEach(({ code, payout }) => {
+
             const payoutTx: TransactionRecord = {
               id: `TX-WIN-${code}-${Date.now()}`,
               type: "PAYOUT",
@@ -1051,14 +1146,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
   const value: BetrixState = {
     profile: {
-      phone,
-      userId: "6939B805",
-      verified: true,
-      tier: "BRONZE I",
-      memberSince: "Sep 2026",
-      status: "Active",
-      nextUpdateDate: "01 Oct",
+      phone: phone || profileData.phone,
+      userId: profileData.userId,
+      verified: profileData.verified,
+      tier: profileData.tier,
+      memberSince: profileData.memberSince,
+      status: profileData.status || "Active",
+      nextUpdateDate: profileData.nextUpdateDate || "Next Month",
     },
+
     points: balance,
     balance,
     transactions,

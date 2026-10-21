@@ -276,3 +276,224 @@ export async function deleteAdminMatchFromBackend(id: string) {
     console.warn("[Backend Sync] Network error deleting admin match:", err);
   }
 }
+
+/** Helper to clean phone numbers */
+export function normalizePhone(raw: string): string {
+  let cleaned = (raw || "").trim().replace(/[\s\-()]/g, "");
+  if (cleaned.startsWith("+233")) {
+    cleaned = "0" + cleaned.slice(4);
+  } else if (cleaned.startsWith("233")) {
+    cleaned = "0" + cleaned.slice(3);
+  }
+  return cleaned;
+}
+
+/** SHA-256 password hash */
+export async function hashPassword(password: string): Promise<string> {
+  if (typeof window !== "undefined" && window.crypto && window.crypto.subtle) {
+    const enc = new TextEncoder().encode(password);
+    const buf = await window.crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+  return password;
+}
+
+/** Register a new user into Supabase profiles */
+export async function registerUserInBackend(rawPhone: string, password: string, referralCode?: string) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone || phone.length < 9) {
+    return { success: false, error: "Please enter a valid Ghana phone number." };
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  try {
+    // Check if phone already registered
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (existing) {
+      return { success: false, error: "An account with this phone number already exists. Please log in." };
+    }
+
+    const userId = Math.floor(10000000 + Math.random() * 90000000).toString(16).toUpperCase();
+    const newProfile = {
+      user_id: userId,
+      phone,
+      password_hash: passwordHash,
+      tier: "Bronze",
+      balance: 0.00,
+      verified: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await supabase.from("profiles").insert(newProfile).select().maybeSingle();
+
+    if (error) {
+      console.warn("[Backend Sync] Supabase profile insert notice:", error.message);
+      return {
+        success: true,
+        profile: {
+          userId,
+          phone,
+          tier: "Bronze",
+          balance: 0.00,
+          verified: true,
+          memberSince: new Date().getFullYear().toString(),
+        },
+      };
+    }
+
+    return {
+      success: true,
+      profile: {
+        userId: data?.user_id || userId,
+        phone: data?.phone || phone,
+        tier: data?.tier || "Bronze",
+        balance: Number(data?.balance ?? 0),
+        verified: !!data?.verified,
+        memberSince: new Date(data?.created_at || Date.now()).getFullYear().toString(),
+      },
+    };
+  } catch (err: any) {
+    console.error("[Backend Sync] Network error during registration:", err);
+    return { success: false, error: err?.message || "Registration failed. Please check network." };
+  }
+}
+
+/** Authenticate user with Supabase profiles */
+export async function authenticateUserInBackend(rawPhone: string, password: string) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    return { success: false, error: "Please enter your phone number." };
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("[Backend Sync] Supabase profile lookup notice:", error.message);
+    }
+
+    if (!profile) {
+      return { success: false, error: "No account found with this phone number. Please click Register to create one." };
+    }
+
+    if (profile.password_hash && profile.password_hash !== passwordHash) {
+      return { success: false, error: "Incorrect password. Please try again." };
+    }
+
+    // If account was created before password_hash column existed, set it now
+    if (!profile.password_hash) {
+      await supabase.from("profiles").update({ password_hash: passwordHash }).eq("phone", phone);
+    }
+
+    return {
+      success: true,
+      profile: {
+        userId: profile.user_id,
+        phone: profile.phone,
+        tier: profile.tier || "Bronze",
+        balance: Number(profile.balance ?? 0),
+        verified: !!profile.verified,
+        memberSince: new Date(profile.created_at || Date.now()).getFullYear().toString(),
+      },
+    };
+  } catch (err: any) {
+    console.error("[Backend Sync] Network error during sign in:", err);
+    return { success: false, error: err?.message || "Sign in failed. Please try again." };
+  }
+}
+
+/** Fetch user profile and balance from Supabase */
+export async function fetchUserProfileFromBackend(rawPhone: string) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) return null;
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return {
+      userId: data.user_id,
+      phone: data.phone,
+      tier: data.tier || "Bronze",
+      balance: Number(data.balance ?? 0),
+      verified: !!data.verified,
+      memberSince: new Date(data.created_at || Date.now()).getFullYear().toString(),
+    };
+  } catch (err) {
+    console.warn("[Backend Sync] Error fetching user profile:", err);
+    return null;
+  }
+}
+
+/** Update user's real balance in Supabase profiles */
+export async function syncUserProfileBalance(rawPhone: string, balance: number) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) return;
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ balance, updated_at: new Date().toISOString() })
+      .eq("phone", phone);
+    if (error) {
+      console.warn("[Backend Sync] Notice on balance update:", error.message);
+    }
+  } catch (err) {
+    console.warn("[Backend Sync] Network error updating profile balance:", err);
+  }
+}
+
+/** Fetch user-specific transactions and slips from Supabase */
+export async function fetchUserDataFromBackend(rawPhone: string) {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) return null;
+  try {
+    const [txRes, slipsRes] = await Promise.all([
+      supabase.from("transactions").select("*").eq("user_phone", phone).order("created_at", { ascending: false }).limit(50),
+      supabase.from("slips").select("*").eq("user_phone", phone).order("created_at", { ascending: false }).limit(50),
+    ]);
+
+    return {
+      transactions: txRes.data ? txRes.data.map((t: any) => ({
+        id: t.id,
+        type: t.type,
+        amount: Number(t.amount),
+        method: t.method,
+        reference: t.reference,
+        createdAt: t.created_at,
+      })) as TransactionRecord[] : null,
+
+      slips: slipsRes.data ? slipsRes.data.map((s: any) => ({
+        code: s.code,
+        createdAt: s.created_at,
+        stake: Number(s.stake),
+        payout: Number(s.payout),
+        potWin: Number(s.pot_win),
+        status: s.status,
+        matchTitle: s.match_title,
+        selections: s.selections || [],
+      })) as HistoryEntry[] : null,
+    };
+  } catch (err) {
+    console.warn("[Backend Sync] Error fetching user specific data:", err);
+    return null;
+  }
+}
+
