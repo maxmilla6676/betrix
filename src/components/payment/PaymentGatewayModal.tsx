@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ShieldCheck,
   CreditCard,
@@ -11,12 +11,15 @@ import {
   Zap,
   Coins,
   Copy,
+  ExternalLink,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useBetrix, formatGHS } from "@/store/betrix";
+import { createSeevCheckout, verifySeevPayment } from "@/services/seevplus";
 import { cn } from "@/lib/utils";
 
 export interface PaymentGatewayModalProps {
@@ -25,7 +28,7 @@ export interface PaymentGatewayModalProps {
   defaultAmount?: number;
 }
 
-type PaymentMethod = "mtn" | "telecel" | "at" | "card";
+type PaymentMethod = "seevplus" | "mtn" | "telecel" | "at" | "card";
 
 const PRESET_AMOUNTS = [30, 50, 100, 200, 300, 500, 1000];
 
@@ -35,23 +38,29 @@ export function PaymentGatewayModal({
   defaultAmount = 300,
 }: PaymentGatewayModalProps) {
   const { profile, deposit } = useBetrix();
-  const [method, setMethod] = useState<PaymentMethod>("mtn");
+  const [method, setMethod] = useState<PaymentMethod>("seevplus");
   const [amount, setAmount] = useState<number>(defaultAmount);
   const [phone, setPhone] = useState<string>(profile.phone || "0205795789");
-  
+
   // Card details state
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvc, setCardCvc] = useState("");
 
-  // Gateway Step state: "input" | "processing" | "prompt" | "success"
-  const [step, setStep] = useState<"input" | "processing" | "prompt" | "success">("input");
+  // Gateway Step state: "input" | "processing" | "checkout_redirect" | "prompt" | "success"
+  const [step, setStep] = useState<"input" | "processing" | "checkout_redirect" | "prompt" | "success">("input");
   const [txRef, setTxRef] = useState<string>("");
   const [pin, setPin] = useState<string>("");
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState<boolean>(false);
 
   const resetFlow = () => {
     setStep("input");
     setPin("");
+    setCheckoutUrl(null);
+    setPaymentId(null);
+    setIsPolling(false);
   };
 
   const handleClose = (newOpen: boolean) => {
@@ -63,6 +72,8 @@ export function PaymentGatewayModal({
 
   const getMethodName = (m: PaymentMethod) => {
     switch (m) {
+      case "seevplus":
+        return "SeevPlus Multi-Pay";
       case "mtn":
         return "MTN Mobile Money";
       case "telecel":
@@ -70,11 +81,40 @@ export function PaymentGatewayModal({
       case "at":
         return "AT Money (AirtelTigo)";
       case "card":
-        return "Visa / Mastercard / Paystack";
+        return "Visa / Mastercard";
     }
   };
 
-  const handleInitiatePayment = (e: React.FormEvent) => {
+  // Poll for status when on checkout_redirect step
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    if (step === "checkout_redirect" && (paymentId || txRef)) {
+      setIsPolling(true);
+
+      const checkStatus = async () => {
+        const verifyRes = await verifySeevPayment(paymentId || undefined, txRef);
+        if (verifyRes.verified) {
+          deposit(amount, `SeevPlus · ${getMethodName(method)}`, txRef);
+          setStep("success");
+          toast.success(`Deposit of GHS ${amount.toFixed(2)} confirmed via SeevPlus!`);
+          setIsPolling(false);
+          return;
+        }
+
+        // Keep polling every 4 seconds
+        timer = setTimeout(checkStatus, 4000);
+      };
+
+      timer = setTimeout(checkStatus, 4000);
+    }
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [step, paymentId, txRef, amount, method, deposit]);
+
+  const handleInitiatePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || amount <= 0) {
       toast.error("Please enter a valid amount in GHS Cedis");
@@ -89,24 +129,57 @@ export function PaymentGatewayModal({
       return;
     }
 
-    const generatedRef = `PAY-GHS-${amount}-${Math.floor(100000 + Math.random() * 900000)}`;
-    setTxRef(generatedRef);
     setStep("processing");
 
-    // Simulate gateway network request
-    setTimeout(() => {
+    // Call SeevPlus Checkout Serverless Endpoint
+    const res = await createSeevCheckout({
+      amount,
+      currency: "GHS",
+      phone,
+      name: profile.userId || "Betrix Player",
+      method: getMethodName(method),
+      metadata: {
+        method,
+      },
+    });
+
+    setTxRef(res.reference);
+
+    if (res.checkoutUrl) {
+      // Live SeevPlus checkout URL returned
+      setCheckoutUrl(res.checkoutUrl);
+      setPaymentId(res.paymentId || null);
+      setStep("checkout_redirect");
+      // Optionally open the checkout window
+      window.open(res.checkoutUrl, "_blank");
+    } else {
+      // Sandbox or in-app direct MoMo authorization prompt
       setStep("prompt");
-    }, 1500);
+    }
   };
 
   const handleAuthorizePayment = () => {
     setStep("processing");
 
     setTimeout(() => {
-      deposit(amount, getMethodName(method), txRef);
+      deposit(amount, `SeevPlus · ${getMethodName(method)}`, txRef);
       setStep("success");
       toast.success(`Deposit of GHS ${amount.toFixed(2)} successful! Balance updated.`);
-    }, 2000);
+    }, 1500);
+  };
+
+  const handleManualVerify = async () => {
+    setStep("processing");
+    const verifyRes = await verifySeevPayment(paymentId || undefined, txRef);
+
+    if (verifyRes.verified) {
+      deposit(amount, `SeevPlus · ${getMethodName(method)}`, txRef);
+      setStep("success");
+      toast.success(`Deposit of GHS ${amount.toFixed(2)} verified and credited!`);
+    } else {
+      setStep("checkout_redirect");
+      toast.info("Payment still pending. If you just authorized on your phone, click verify again in a moment.");
+    }
   };
 
   return (
@@ -120,13 +193,13 @@ export function PaymentGatewayModal({
             </div>
             <div>
               <h3 className="font-extrabold text-base tracking-tight text-white flex items-center gap-1.5">
-                BETRIX Payment Gateway
+                BETRIX Pay
               </h3>
-              <p className="text-[11px] text-gray-400 font-medium">Real Cedis (GHS) Instant Deposit</p>
+              <p className="text-[11px] text-gray-400 font-medium">Powered by SeevPlus Gateway</p>
             </div>
           </div>
           <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Gateway
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> SeevPlus Live
           </span>
         </div>
 
@@ -143,9 +216,15 @@ export function PaymentGatewayModal({
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     {
+                      id: "seevplus" as const,
+                      name: "SeevPlus Multi-Pay",
+                      badge: "Recommended",
+                      color: "bg-emerald-500/10 border-emerald-500/40 text-emerald-300",
+                    },
+                    {
                       id: "mtn" as const,
                       name: "MTN MoMo",
-                      badge: "Instant",
+                      badge: "SeevPlus",
                       color: "bg-amber-500/10 border-amber-500/40 text-amber-300",
                     },
                     {
@@ -163,8 +242,8 @@ export function PaymentGatewayModal({
                     {
                       id: "card" as const,
                       name: "Visa / Card",
-                      badge: "Paystack",
-                      color: "bg-emerald-500/10 border-emerald-500/40 text-emerald-300",
+                      badge: "SeevPlus",
+                      color: "bg-purple-500/10 border-purple-500/40 text-purple-300",
                     },
                   ].map((m) => (
                     <button
@@ -253,7 +332,7 @@ export function PaymentGatewayModal({
                     />
                   </div>
                   <p className="text-[10px] text-gray-400 font-medium">
-                    A USSD prompt will be sent directly to this phone to authorize payment.
+                    A secure MoMo prompt or SeevPlus checkout will be initiated for this number.
                   </p>
                 </div>
               ) : (
@@ -299,7 +378,7 @@ export function PaymentGatewayModal({
                 type="submit"
                 className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-12 rounded-xl uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 mt-4"
               >
-                <Zap className="h-4 w-4 fill-black" /> Pay {formatGHS(amount)} via Gateway
+                <Zap className="h-4 w-4 fill-black" /> Pay {formatGHS(amount)} via SeevPlus
               </Button>
             </form>
           )}
@@ -308,10 +387,73 @@ export function PaymentGatewayModal({
             <div className="py-12 flex flex-col items-center justify-center text-center space-y-4">
               <Loader2 className="h-12 w-12 text-[#F5C400] animate-spin" />
               <div>
-                <h4 className="font-extrabold text-lg text-white">Connecting to Gateway...</h4>
+                <h4 className="font-extrabold text-lg text-white">Connecting to SeevPlus...</h4>
                 <p className="text-xs text-gray-400 mt-1">
-                  Communicating with {getMethodName(method)} server
+                  Initializing secure gateway session for {formatGHS(amount)}
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* SeevPlus Live Checkout Redirect Step */}
+          {step === "checkout_redirect" && (
+            <div className="space-y-4 py-2">
+              <div className="bg-[#1c1c24] border border-emerald-500/40 rounded-2xl p-4 space-y-3 text-center">
+                <div className="h-12 w-12 rounded-full bg-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+                  <ExternalLink className="h-6 w-6" />
+                </div>
+                <div>
+                  <h4 className="font-black text-base text-white">SeevPlus Checkout Opened</h4>
+                  <p className="text-xs text-gray-300 mt-1">
+                    Complete your payment of <span className="font-mono font-bold text-[#F5C400]">GHS {amount.toFixed(2)}</span> on the official SeevPlus secure page.
+                  </p>
+                </div>
+
+                <div className="bg-[#14141a] p-3 rounded-xl text-left border border-[#2a2a38] space-y-1.5 text-xs">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Gateway:</span>
+                    <span className="font-bold text-white">SeevPlus (SeevCash)</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Ref Code:</span>
+                    <span className="font-mono text-gray-300 text-[10px] truncate max-w-[200px]">{txRef}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400 items-center">
+                    <span>Listening Status:</span>
+                    <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1">
+                      <RefreshCw className={cn("h-3 w-3", isPolling && "animate-spin")} /> Awaiting settlement
+                    </span>
+                  </div>
+                </div>
+
+                {checkoutUrl && (
+                  <Button
+                    type="button"
+                    onClick={() => window.open(checkoutUrl, "_blank")}
+                    variant="outline"
+                    className="w-full border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 text-xs h-10 rounded-xl flex items-center justify-center gap-1.5"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Re-open SeevPlus Checkout
+                  </Button>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  onClick={handleManualVerify}
+                  className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-12 rounded-xl uppercase tracking-wider shadow-lg flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="h-4 w-4" /> I have completed payment — Verify
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={resetFlow}
+                  className="w-full text-xs text-gray-400 hover:text-white"
+                >
+                  Cancel & Return
+                </Button>
               </div>
             </div>
           )}
@@ -330,8 +472,8 @@ export function PaymentGatewayModal({
                 </div>
                 <div className="bg-[#14141a] p-3 rounded-xl text-left border border-[#2a2a38] space-y-1 text-xs">
                   <div className="flex justify-between text-gray-400">
-                    <span>Merchant:</span>
-                    <span className="font-bold text-white">BETRIX SPORTSBOOK</span>
+                    <span>Gateway:</span>
+                    <span className="font-bold text-white">SeevPlus Gateway</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
                     <span>Amount:</span>
@@ -397,8 +539,8 @@ export function PaymentGatewayModal({
                   <span className="font-mono text-gray-200 font-bold">{txRef}</span>
                 </div>
                 <div className="flex justify-between text-gray-400">
-                  <span>Method:</span>
-                  <span className="text-gray-200 font-medium">{getMethodName(method)}</span>
+                  <span>Gateway Method:</span>
+                  <span className="text-gray-200 font-medium">SeevPlus · {getMethodName(method)}</span>
                 </div>
                 <div className="flex justify-between text-gray-400">
                   <span>New Balance:</span>
