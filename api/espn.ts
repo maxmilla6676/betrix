@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const targetUrl = req.query?.url as string | undefined;
+  const targetUrl = (req.query ? req.query["url"] : undefined) as string | undefined;
 
   if (!targetUrl || !targetUrl.startsWith("https://site.api.espn.com/")) {
     res
@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Append dates param forwarded from the client
   let fetchUrl = targetUrl;
-  const dates = req.query?.dates as string | undefined;
+  const dates = (req.query ? req.query["dates"] : undefined) as string | undefined;
   if (dates) {
     fetchUrl += (fetchUrl.includes("?") ? "&" : "?") + `dates=${encodeURIComponent(dates)}`;
   }

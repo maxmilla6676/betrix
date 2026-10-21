@@ -50,11 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const apiKey =
-      process.env.SEEV_CHECKOUT_API_KEY ||
-      process.env.VITE_SEEV_CHECKOUT_API_KEY ||
-      process.env.SEEV_API_KEY;
+      process.env["SEEV_CHECKOUT_API_KEY"] ||
+      process.env["VITE_SEEV_CHECKOUT_API_KEY"] ||
+      process.env["SEEV_API_KEY"];
 
-    const baseUrl = process.env.SEEV_BASE_URL || "https://api.seevplus.com";
+    const baseUrl = process.env["SEEV_BASE_URL"] || "https://api.seevplus.com";
     const ref = `WTH-SEEV-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     if (!apiKey) {
@@ -70,8 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const subaccountCode =
       body.subaccount ||
-      process.env.SEEV_SUBACCOUNT_CODE ||
-      process.env.VITE_SEEV_SUBACCOUNT_CODE;
+      process.env["SEEV_SUBACCOUNT_CODE"] ||
+      process.env["VITE_SEEV_SUBACCOUNT_CODE"];
 
     const payload: Record<string, unknown> = {
       amount: amountInSmallestUnit,
@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     if (subaccountCode) {
-      payload.subaccount = subaccountCode;
+      payload["subaccount"] = subaccountCode;
     }
 
     const upstreamResponse = await fetch(`${baseUrl}/api/v1/developer/payouts`, {

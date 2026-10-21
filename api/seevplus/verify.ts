@@ -32,8 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const paymentId = (req.query?.paymentId || req.query?.id) as string | undefined;
-  const reference = (req.query?.ref || req.query?.reference) as string | undefined;
+  const paymentId = (req.query ? (req.query["paymentId"] || req.query["id"]) : undefined) as string | undefined;
+  const reference = (req.query ? (req.query["ref"] || req.query["reference"]) : undefined) as string | undefined;
 
   if (!paymentId && !reference) {
     res.status(400).json({ error: "Missing required parameter: 'paymentId' or 'ref'" });
@@ -41,11 +41,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const apiKey =
-    process.env.SEEV_CHECKOUT_API_KEY ||
-    process.env.VITE_SEEV_CHECKOUT_API_KEY ||
-    process.env.SEEV_API_KEY;
+    process.env["SEEV_CHECKOUT_API_KEY"] ||
+    process.env["VITE_SEEV_CHECKOUT_API_KEY"] ||
+    process.env["SEEV_API_KEY"];
 
-  const baseUrl = process.env.SEEV_BASE_URL || "https://api.seevplus.com";
+  const baseUrl = process.env["SEEV_BASE_URL"] || "https://api.seevplus.com";
 
   // If in sandbox mode without keys
   if (!apiKey || (paymentId && paymentId.startsWith("pmt_sandbox_"))) {

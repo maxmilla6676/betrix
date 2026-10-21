@@ -32,7 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const rawSignature = (req.headers["x-seev-signature"] || req.headers["X-Seev-Signature"]) as string | undefined;
-    const webhookSecret = process.env.SEEV_WEBHOOK_SECRET;
+    const webhookSecret = process.env["SEEV_WEBHOOK_SECRET"];
 
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
     const rawBodyString = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
@@ -81,11 +81,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`[SeevPlus Webhook] Payment SUCCESS: Ref ${ref}, Amount ${currency} ${amountInMajorUnit}, Phone ${phone}`);
 
         // Write confirmed deposit to Supabase
-        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+        const supabaseUrl = process.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"] || "";
         const supabaseKey =
-          process.env.SUPABASE_SERVICE_ROLE_KEY ||
-          process.env.VITE_SUPABASE_ANON_KEY ||
-          process.env.SUPABASE_ANON_KEY ||
+          process.env["SUPABASE_SERVICE_ROLE_KEY"] ||
+          process.env["VITE_SUPABASE_ANON_KEY"] ||
+          process.env["SUPABASE_ANON_KEY"] ||
           "";
 
         if (supabaseUrl && supabaseKey && amountInMajorUnit > 0) {

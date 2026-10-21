@@ -4,7 +4,7 @@
 //     nitro (build-only using cloudflare as a default target), VITE_* env injection, @ path alias,
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // Ensure Nitro builds with preset 'vercel' producing .vercel/output for Vercel deployments
-process.env.NITRO_PRESET = process.env.NITRO_PRESET || "vercel";
+process.env["NITRO_PRESET"] = process.env["NITRO_PRESET"] || "vercel";
 
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 

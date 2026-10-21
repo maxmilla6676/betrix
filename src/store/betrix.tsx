@@ -1062,7 +1062,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     createSeevPayout({
       amount,
       phone: accountDetails || phone || "",
-      accountName: profile.userId || "Betrix User",
+      accountName: phone ? `User ${phone}` : "Betrix User",
       method,
       metadata: { reference: ref, user_phone: phone },
     }).then((payoutRes) => {
@@ -1093,7 +1093,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ...prev,
     ]);
     return success;
-  }, [phone, profile.userId]);
+  }, [phone]);
 
   const settleBet = useCallback((code: string, outcome: "WON" | "LOST" = "WON") => {
     setHistory((prev) => {

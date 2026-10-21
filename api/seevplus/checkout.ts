@@ -44,11 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const apiKey =
-      process.env.SEEV_CHECKOUT_API_KEY ||
-      process.env.VITE_SEEV_CHECKOUT_API_KEY ||
-      process.env.SEEV_API_KEY;
+      process.env["SEEV_CHECKOUT_API_KEY"] ||
+      process.env["VITE_SEEV_CHECKOUT_API_KEY"] ||
+      process.env["SEEV_API_KEY"];
 
-    const baseUrl = process.env.SEEV_BASE_URL || "https://api.seevplus.com";
+    const baseUrl = process.env["SEEV_BASE_URL"] || "https://api.seevplus.com";
     const ref = reference || `SEEV-${Date.now()}`;
 
     // If API key is not configured, supply seamless developer sandbox fallback
@@ -70,8 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const subaccountCode =
       body.subaccount ||
-      process.env.SEEV_SUBACCOUNT_CODE ||
-      process.env.VITE_SEEV_SUBACCOUNT_CODE;
+      process.env["SEEV_SUBACCOUNT_CODE"] ||
+      process.env["VITE_SEEV_SUBACCOUNT_CODE"];
 
     const payload: Record<string, unknown> = {
       type: "checkout",
@@ -91,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
 
     if (subaccountCode) {
-      payload.subaccount = subaccountCode;
+      payload["subaccount"] = subaccountCode;
     }
 
     const upstreamResponse = await fetch(`${baseUrl}/api/v1/developer/payments`, {
