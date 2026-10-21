@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { matchById, teamById, isMatchLocked, matches as seedMatches, type Match } from "@/data/football";
+import { matchById, teamById, isMatchLocked, type Match } from "@/data/football";
 import { fetchLiveSportsFixtures, dynamicTeams } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
 import { toast } from "sonner";
@@ -8,6 +8,13 @@ import {
   type AdminMatch,
   convertAdminMatchToMatch,
 } from "@/data/adminMatches";
+import {
+  syncDepositToBackend,
+  syncSlipToBackend,
+  syncPartnerToBackend,
+  syncPartnerDepositToBackend,
+  fetchBackendInitialData,
+} from "@/services/backendSync";
 
 export type { AdminLeague, AdminMatch };
 export { isMatchLocked };
@@ -324,46 +331,54 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     });
   }, [adminMatches, adminLeagues, apiMatches, enableLiveApi, tick]);
 
-  // Revenue & Stat overrides (null by default to use real live data)
-  const [totalRevenueOverride, setTotalRevenueOverride] = useState<number | null>(null);
-  const [partnersCountOverride, setPartnersCountOverride] = useState<number | null>(null);
-  const [membersCountOverride, setMembersCountOverride] = useState<number | null>(null);
-  const [analysesCountOverride, setAnalysesCountOverride] = useState<number | null>(null);
-  const [pendingCountOverride, setPendingCountOverride] = useState<number | null>(null);
-
   // Daily revenue ledger mapping dateStr (YYYY-MM-DD) to DailyRevenueEntry
   const [dailyRevenueLedger, setDailyRevenueLedger] = useState<Record<string, DailyRevenueEntry>>({});
 
   useEffect(() => {
+    // 1. Initial hydration from client cache for instant responsiveness
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (typeof parsed.balance === "number") setBalance(parsed.balance);
-      if (typeof parsed.phone === "string") setPhone(parsed.phone);
-      if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
-      if (Array.isArray(parsed.partnersList)) {
-        const migrated = parsed.partnersList.map((p: any) => ({
-          ...p,
-          status: p.status || "APPROVED",
-        }));
-        setPartnersList(migrated);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.balance === "number") setBalance(parsed.balance);
+        if (typeof parsed.phone === "string") setPhone(parsed.phone);
+        if (Array.isArray(parsed.transactions)) setTransactions(parsed.transactions);
+        if (Array.isArray(parsed.partnersList)) {
+          const migrated = parsed.partnersList.map((p: any) => ({
+            ...p,
+            status: p.status || "APPROVED",
+          }));
+          setPartnersList(migrated);
+        }
+        if (Array.isArray(parsed.partnerDeposits)) setPartnerDeposits(parsed.partnerDeposits);
+        if (typeof parsed.referredByPartner === "string") setReferredByPartner(parsed.referredByPartner);
+        if (Array.isArray(parsed.slip)) setSlip(parsed.slip);
+        if (Array.isArray(parsed.history)) setHistory(parsed.history);
+        if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
+        if (typeof parsed.isLoggedIn === "boolean") setIsLoggedIn(parsed.isLoggedIn);
+        if (parsed.dailyRevenueLedger) setDailyRevenueLedger(parsed.dailyRevenueLedger);
       }
-      if (Array.isArray(parsed.partnerDeposits)) setPartnerDeposits(parsed.partnerDeposits);
-      if (typeof parsed.referredByPartner === "string") setReferredByPartner(parsed.referredByPartner);
-      if (Array.isArray(parsed.slip)) setSlip(parsed.slip);
-      if (Array.isArray(parsed.history)) setHistory(parsed.history);
-      if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
-      if (typeof parsed.isLoggedIn === "boolean") setIsLoggedIn(parsed.isLoggedIn);
-      if (parsed.dailyRevenueLedger) setDailyRevenueLedger(parsed.dailyRevenueLedger);
-      if (typeof parsed.totalRevenueOverride === "number") setTotalRevenueOverride(parsed.totalRevenueOverride);
-      if (typeof parsed.partnersCountOverride === "number") setPartnersCountOverride(parsed.partnersCountOverride);
-      if (typeof parsed.membersCountOverride === "number") setMembersCountOverride(parsed.membersCountOverride);
-      if (typeof parsed.analysesCountOverride === "number") setAnalysesCountOverride(parsed.analysesCountOverride);
-      if (typeof parsed.pendingCountOverride === "number") setPendingCountOverride(parsed.pendingCountOverride);
     } catch {
       /* ignore corrupted local state */
     }
+
+    // 2. Fetch authoritative live data directly from the Supabase backend
+    fetchBackendInitialData().then((remote) => {
+      if (remote) {
+        if (remote.transactions && remote.transactions.length > 0) {
+          setTransactions(remote.transactions);
+        }
+        if (remote.slips && remote.slips.length > 0) {
+          setHistory(remote.slips);
+        }
+        if (remote.partners && remote.partners.length > 0) {
+          setPartnersList(remote.partners);
+        }
+        if (remote.partnerDeposits && remote.partnerDeposits.length > 0) {
+          setPartnerDeposits(remote.partnerDeposits);
+        }
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -382,11 +397,6 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
           notifications,
           isLoggedIn,
           dailyRevenueLedger,
-          totalRevenueOverride,
-          partnersCountOverride,
-          membersCountOverride,
-          analysesCountOverride,
-          pendingCountOverride,
         })
       );
     } catch {
@@ -404,11 +414,6 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     notifications,
     isLoggedIn,
     dailyRevenueLedger,
-    totalRevenueOverride,
-    partnersCountOverride,
-    membersCountOverride,
-    analysesCountOverride,
-    pendingCountOverride,
   ]);
 
   const updatePartnerCommission = useCallback((partnerId: string, newRate: number) => {
@@ -456,6 +461,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       };
 
       setPartnersList((prev) => [newPartner, ...prev]);
+      syncPartnerToBackend(newPartner);
 
       setNotifications((prev) => [
         {
@@ -478,11 +484,13 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     setPartnersList((prev) =>
       prev.map((p) => {
         if (p.id === partnerId) {
-          return {
+          const updated = {
             ...p,
             status: "APPROVED" as const,
             commissionRate: typeof commissionRate === "number" ? commissionRate : p.commissionRate,
           };
+          syncPartnerToBackend(updated);
+          return updated;
         }
         return p;
       })
@@ -590,6 +598,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         status: "Completed",
       };
       setPartnerDeposits((prev) => [newDep, ...prev]);
+      syncPartnerDepositToBackend(newDep);
 
       setNotifications((prev) => [
         {
@@ -607,95 +616,70 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   );
 
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const todayRevenue = dailyRevenueLedger[todayISO]?.totalRevenue || 0;
-  const totalRevenue = totalRevenueOverride !== null
-    ? totalRevenueOverride
-    : Object.values(dailyRevenueLedger).reduce((acc, cur) => acc + cur.totalRevenue, 0);
+  const todayRevenue = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "DEPOSIT" && t.createdAt.slice(0, 10) === todayISO)
+      .reduce((acc, cur) => acc + cur.amount, 0);
+  }, [transactions, todayISO]);
+
+  const totalRevenue = useMemo(() => {
+    return transactions
+      .filter((t) => t.type === "DEPOSIT")
+      .reduce((acc, cur) => acc + cur.amount, 0);
+  }, [transactions]);
+
   const devCommission = Number((todayRevenue * 0.20).toFixed(2));
 
-  const totalPartnersCount = partnersCountOverride !== null
-    ? partnersCountOverride
-    : partnersList.filter((p) => p.status === "APPROVED").length;
-  const totalUsersCount = membersCountOverride !== null
-    ? membersCountOverride
-    : partnersList.reduce((acc, p) => acc + (p.activeUsers || 0), 0) + (isLoggedIn ? 1 : 0);
-  const activeAnalysesCount = analysesCountOverride !== null
-    ? analysesCountOverride
-    : history.filter((h) => h.status === "PENDING").length;
-  const pendingPaymentsCount = pendingCountOverride !== null
-    ? pendingCountOverride
-    : partnersList.filter((p) => p.status === "PENDING").length;
+  const totalPartnersCount = partnersList.filter((p) => p.status === "APPROVED").length;
+  const totalUsersCount = partnersList.reduce((acc, p) => acc + (p.activeUsers || 0), 0) + (isLoggedIn ? 1 : 0);
+  const activeAnalysesCount = history.filter((h) => h.status === "PENDING").length;
+  const pendingPaymentsCount = partnersList.filter((p) => p.status === "PENDING").length;
 
   const getRevenueForDate = useCallback(
     (dateStr: string): DailyRevenueEntry => {
-      if (dailyRevenueLedger[dateStr]) return dailyRevenueLedger[dateStr];
-      return { date: dateStr, totalRevenue: 0, transactionsCount: 0 };
+      const dayTxs = transactions.filter(
+        (t) => t.type === "DEPOSIT" && t.createdAt.slice(0, 10) === dateStr
+      );
+      return {
+        date: dateStr,
+        totalRevenue: dayTxs.reduce((acc, cur) => acc + cur.amount, 0),
+        transactionsCount: dayTxs.length,
+      };
     },
-    [dailyRevenueLedger]
+    [transactions]
   );
 
   const simulateDeposit = useCallback(
     (amount: number, dateStr?: string) => {
       const targetDate = dateStr || new Date().toISOString().slice(0, 10);
-      setDailyRevenueLedger((prev) => {
-        const cur = prev[targetDate] || { date: targetDate, totalRevenue: 0, transactionsCount: 0 };
-        return {
-          ...prev,
-          [targetDate]: {
-            date: targetDate,
-            totalRevenue: cur.totalRevenue + amount,
-            transactionsCount: cur.transactionsCount + 1,
-          },
-        };
-      });
-      setTotalRevenueOverride((prev) => (prev !== null ? prev + amount : amount));
-      setTransactions((prev) => [
-        {
-          id: `TX-DEP-${Date.now()}`,
-          type: "DEPOSIT",
-          amount,
-          method: "MoMo Gateway",
-          reference: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+      const newTx: TransactionRecord = {
+        id: `TX-DEP-${Date.now()}`,
+        type: "DEPOSIT",
+        amount,
+        method: "Live Gateway",
+        reference: `REF-${Math.floor(100000 + Math.random() * 900000)}`,
+        createdAt: targetDate === new Date().toISOString().slice(0, 10) ? new Date().toISOString() : `${targetDate}T12:00:00.000Z`,
+      };
+      setTransactions((prev) => [newTx, ...prev]);
+      syncDepositToBackend(newTx, phone);
     },
-    []
+    [phone]
   );
 
   const resetAllStatsToZero = useCallback(() => {
     setDailyRevenueLedger({});
-    setTotalRevenueOverride(0);
-    setPartnersCountOverride(0);
-    setMembersCountOverride(0);
-    setAnalysesCountOverride(0);
-    setPendingCountOverride(0);
     setPartnerDeposits([]);
     setTransactions([]);
   }, []);
 
   const loadScreenshotStats = useCallback(() => {
-    const now = new Date();
-    const map: Record<string, DailyRevenueEntry> = {};
-    const offsets = [
-      { offset: 4, rev: 1950, count: 5 },
-      { offset: 3, rev: 5100, count: 12 },
-      { offset: 2, rev: 2850, count: 7 },
-      { offset: 1, rev: 0, count: 0 },
-      { offset: 0, rev: 0, count: 0 },
-    ];
-    offsets.forEach(({ offset, rev, count }) => {
-      const d = new Date(now.getTime() - offset * 86400000);
-      const iso = d.toISOString().slice(0, 10);
-      map[iso] = { date: iso, totalRevenue: rev, transactionsCount: count };
-    });
-    setDailyRevenueLedger(map);
-    setTotalRevenueOverride(214600);
-    setPartnersCountOverride(8);
-    setMembersCountOverride(4198);
-    setAnalysesCountOverride(616);
-    setPendingCountOverride(6);
+    fetchBackendInitialData().then((remote) => {
+      if (remote) {
+        if (remote.transactions) setTransactions(remote.transactions);
+        if (remote.slips) setHistory(remote.slips);
+        if (remote.partners) setPartnersList(remote.partners);
+        if (remote.partnerDeposits) setPartnerDeposits(remote.partnerDeposits);
+      }
   }, []);
 
   const clearAllOpenBets = useCallback(() => {
@@ -703,78 +687,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadDemoOngoingBets = useCallback(() => {
-    const mk = (
-      id: string,
-      marketId: string,
-      marketName: string,
-      optionId: string,
-      optionLabel: string,
-      mult: number,
-      matchTitle?: string,
-      kickoffTime?: string
-    ): Selection => ({
-      matchId: id,
-      marketId,
-      marketName,
-      optionId,
-      optionLabel,
-      multiplier: mult,
-      matchTitle,
-      kickoffTime,
+    fetchBackendInitialData().then((remote) => {
+      if (remote?.slips) {
+        setHistory(remote.slips);
+      }
     });
-
-    setHistory((prev) => [
-      {
-        code: "BTX-ACC4",
-        createdAt: new Date().toISOString(),
-        stake: 10.00,
-        potWin: 55.66,
-        status: "PENDING",
-        payout: 0,
-        isLive: true,
-        matchTitle: "Panathinaikos vs Asteras Tripolis",
-        cashoutAvailable: true,
-        cashoutValue: 10.00,
-        selections: [
-          mk("m-pana", "1x2-2up", "1X2 - 2UP", "home", "Home", 1.23, "Panathinaikos vs Asteras Tripolis", "18/10 14:30"),
-          mk("m-lorient", "ou", "Monaco Over/Under", "o05", "Over 0.5", 1.23, "Lorient vs Monaco", "18/10 15:15"),
-          mk("m-nott", "1x2-2up", "1X2 - 2UP", "away", "Away", 1.60, "Nottingham Forest vs Arsenal", "18/10 15:30"),
-        ],
-      },
-      {
-        code: "BTX-UD14",
-        createdAt: new Date(Date.now() - 300000).toISOString(),
-        stake: 14.00,
-        potWin: 42.80,
-        status: "PENDING",
-        payout: 0,
-        isLive: true,
-        matchTitle: "Udinese vs Lecce",
-        cashoutAvailable: false,
-        cashoutValue: 23.00,
-        selections: [
-          mk("m-udi", "1x2", "Match Result", "home", "Home", 1.85, "Udinese vs Lecce", "18/10 13:30"),
-          mk("m-emp", "ou", "Total Goals", "o15", "Over 1.5", 1.35, "Empoli vs Monza", "18/10 16:00"),
-        ],
-      },
-      {
-        code: "BTX-UD10",
-        createdAt: new Date(Date.now() - 900000).toISOString(),
-        stake: 10.00,
-        potWin: 38.50,
-        status: "PENDING",
-        payout: 0,
-        isLive: true,
-        matchTitle: "Udinese vs Lecce",
-        cashoutAvailable: false,
-        cashoutValue: 16.50,
-        selections: [
-          mk("m-udi2", "1x2", "Match Result", "draw", "Draw", 3.20, "Udinese vs Lecce", "18/10 13:30"),
-          mk("m-rom", "btts", "Both Teams To Score", "yes", "Yes", 1.70, "Roma vs Inter", "18/10 18:45"),
-        ],
-      },
-      ...prev.filter((h) => h.code !== "BTX-ACC4" && h.code !== "BTX-UD14" && h.code !== "BTX-UD10"),
-    ]);
   }, []);
 
   const toggleCashoutAvailable = useCallback((code: string) => {
@@ -870,18 +787,18 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         matchTitle: slip.length === 1 ? (slip[0]?.matchTitle || "Single Match") : `${slip.length} Selections Accumulator`,
       };
       setHistory((h) => [entry, ...h]);
+      syncSlipToBackend(entry, phone);
       setBalance((p) => Math.max(0, Number((p - stake).toFixed(2))));
-      setTransactions((t) => [
-        {
-          id: `TX-${entry.code}`,
-          type: "STAKE",
-          amount: stake,
-          method: "Bet Stake",
-          reference: entry.code,
-          createdAt: new Date().toISOString(),
-        },
-        ...t,
-      ]);
+      const newStakeTx: TransactionRecord = {
+        id: `TX-${entry.code}`,
+        type: "STAKE",
+        amount: stake,
+        method: "Bet Stake",
+        reference: entry.code,
+        createdAt: new Date().toISOString(),
+      };
+      setTransactions((t) => [newStakeTx, ...t]);
+      syncDepositToBackend(newStakeTx, phone);
       setSlip([]);
       setNotifications((n) => [
         { id: entry.code, title: "Bet placed (GHS)", body: `Slip ${entry.code} placed with GHS ${stake.toFixed(2)} stake. Potential Win: GHS ${potWin.toFixed(2)}.`, time: "just now", read: false, kind: "result" },
@@ -889,7 +806,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ]);
       return entry;
     },
-    [slip, allMatches, totalMultiplier],
+    [slip, allMatches, totalMultiplier, phone]
   );
 
   const markAllRead = useCallback(() => setNotifications((n) => n.map((x) => ({ ...x, read: true }))), []);
@@ -899,17 +816,16 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     (amount: number, method = "Mobile Money Gateway", reference?: string) => {
       const ref = reference || `PAY-GHS-${amount}-${Math.floor(1000 + Math.random() * 9000)}`;
       setBalance((prev) => prev + amount);
-      setTransactions((prev) => [
-        {
-          id: `TX-DEP-${Date.now()}`,
-          type: "DEPOSIT",
-          amount,
-          method,
-          reference: ref,
-          createdAt: new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+      const newDepTx: TransactionRecord = {
+        id: `TX-DEP-${Date.now()}`,
+        type: "DEPOSIT",
+        amount,
+        method,
+        reference: ref,
+        createdAt: new Date().toISOString(),
+      };
+      setTransactions((prev) => [newDepTx, ...prev]);
+      syncDepositToBackend(newDepTx, phone);
 
       const today = new Date().toISOString().slice(0, 10);
       setDailyRevenueLedger((prev) => {

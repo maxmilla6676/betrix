@@ -306,7 +306,34 @@ function MatchDetailPage() {
     return s;
   }, [match.id]);
 
-  const allMarkets = useMemo(() => generateMatchMarkets(home, away, seed), [home, away, seed]);
+  const allMarkets = useMemo(() => {
+    if (match.markets && match.markets.length > 0) {
+      const liveItems: MarketItem[] = match.markets.map((m) => {
+        let cat: "Main" | "Goals" | "Halves" | "Handicap" | "Corners" | "Cards" = "Main";
+        const idLower = m.id.toLowerCase();
+        if (idLower.includes("ou") || idLower.includes("goals") || idLower.includes("total")) cat = "Goals";
+        else if (idLower.includes("hcp") || idLower.includes("handicap")) cat = "Handicap";
+        else if (idLower.includes("htft") || idLower.includes("half")) cat = "Halves";
+        else if (idLower.includes("corner")) cat = "Corners";
+        else if (idLower.includes("card")) cat = "Cards";
+
+        return {
+          id: m.id,
+          name: m.name,
+          category: cat,
+          options: m.options.map((o) => ({
+            id: o.id,
+            label: o.label,
+            multiplier: o.multiplier,
+          })),
+        };
+      });
+      const generated = generateMatchMarkets(home, away, seed);
+      const liveIds = new Set(liveItems.map((x) => x.id));
+      return [...liveItems, ...generated.filter((g) => !liveIds.has(g.id))];
+    }
+    return generateMatchMarkets(home, away, seed);
+  }, [match.markets, home, away, seed]);
 
   // Tab State: 'markets' | 'stats' | 'chat'
   const [activeMainTab, setActiveMainTab] = useState<"markets" | "stats" | "chat">("markets");

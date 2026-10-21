@@ -424,28 +424,10 @@ function AdminPage() {
                     Reset All to GH₵0
                   </Button>
 
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRestoreScreenshotStats}
-                    className="h-8 text-xs font-bold text-gray-700 border-gray-200 hover:bg-gray-50"
-                  >
-                    Restore Reference Stats
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      simulateDeposit(500);
-                      toast.success("+GH₵500 deposit simulated into Today's Revenue!");
-                    }}
-                    className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
-                  >
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    +GH₵500 MoMo Test
-                  </Button>
+                  <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-emerald-400 text-xs font-bold">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>SeevPlus MoMo Gateway Active</span>
+                  </div>
                 </div>
               </div>
 
@@ -472,7 +454,7 @@ function AdminPage() {
 
                 {transactions.length === 0 ? (
                   <div className="p-8 text-center text-xs text-gray-500 bg-[#1e1e26] rounded-xl border border-dashed border-[#2a2a35]">
-                    No deposit transactions yet. Use "+GH₵500 MoMo Test" above to simulate transactions or click days on the Daily Revenue card.
+                    No deposit transactions yet. Live player deposits completed via SeevPlus or MoMo will automatically appear here.
                   </div>
                 ) : (
                   <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35] overflow-hidden">

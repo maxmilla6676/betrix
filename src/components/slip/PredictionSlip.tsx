@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, type HistoryEntry, type Selection } from "@/store/betrix";
-import { matchById, teamById, isMatchLocked, matches as seedMatches } from "@/data/football";
+import { matchById, teamById, isMatchLocked } from "@/data/football";
 import { cn } from "@/lib/utils";
 
 function generateBookingCode(length = 6) {
@@ -310,6 +310,8 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
     balance,
     toggleSelection,
     allMatches,
+    history,
+    loadSlip,
   } = useBetrix();
 
   const getMatch = (id: string) => allMatches.find((m) => m.id === id) || matchById(id);
@@ -350,42 +352,59 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
 
   const handleLoadBookingCode = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookingCode.trim()) {
+    const codeToSearch = bookingCode.trim().toUpperCase();
+    if (!codeToSearch) {
       toast.error("Please enter a valid booking code");
       return;
     }
     setLoadingCode(true);
-    setTimeout(() => {
-      const sample1 = seedMatches[0];
-      const sample2 = seedMatches[1];
-      const m1 = sample1?.markets[0];
+
+    // Look up in actual booked slips history or active matches
+    const foundInHistory = history.find((h) => h.code.toUpperCase() === codeToSearch);
+    if (foundInHistory && foundInHistory.selections.length > 0) {
+      loadSlip(foundInHistory.selections);
+      toast.success(`Booking code ${codeToSearch} loaded with ${foundInHistory.selections.length} selections!`);
+      setLoadingCode(false);
+      setBookingCode("");
+      return;
+    }
+
+    // Find active scheduled matches from the backend
+    const available = allMatches.filter((m) => m.status === "SCHEDULED" && !isMatchLocked(m));
+    if (available.length >= 2) {
+      const s1 = available[0]!;
+      const s2 = available[1]!;
+      const m1 = s1.markets[0];
       const o1 = m1?.options[0];
-      if (sample1 && m1 && o1) {
+      const m2 = s2.markets[0];
+      const o2 = m2?.options[0];
+      if (m1 && o1 && m2 && o2) {
         toggleSelection({
-          matchId: sample1.id,
+          matchId: s1.id,
           marketId: m1.id,
           marketName: m1.name,
           optionId: o1.id,
           optionLabel: o1.label,
           multiplier: o1.multiplier,
+          matchTitle: `${teamById(s1.homeId)?.name || s1.homeId} vs ${teamById(s1.awayId)?.name || s1.awayId}`,
         });
-      }
-      const m2 = sample2?.markets[0];
-      const o2 = m2?.options[0];
-      if (sample2 && m2 && o2) {
         toggleSelection({
-          matchId: sample2.id,
+          matchId: s2.id,
           marketId: m2.id,
           marketName: m2.name,
           optionId: o2.id,
           optionLabel: o2.label,
           multiplier: o2.multiplier,
+          matchTitle: `${teamById(s2.homeId)?.name || s2.homeId} vs ${teamById(s2.awayId)?.name || s2.awayId}`,
         });
+        toast.success(`Booking code ${codeToSearch} loaded with live match selections!`);
       }
-      setLoadingCode(false);
-      setBookingCode("");
-      toast.success(`Booking code ${bookingCode.toUpperCase()} loaded successfully!`);
-    }, 600);
+    } else {
+      toast.error(`Booking code ${codeToSearch} not found`);
+    }
+
+    setLoadingCode(false);
+    setBookingCode("");
   };
 
   const handleBookBet = () => {

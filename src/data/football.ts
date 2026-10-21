@@ -369,18 +369,19 @@ export const categories = [
 ] as const;
 
 export function matchesForCategory(slug: string): Match[] {
+  const all = Array.from(dynamicMatchesMap.values());
   switch (slug) {
     case "today":
-      return matches.filter((m) => m.sportId === "football" && dayBucket(m.kickoff) === "Today");
+      return all.filter((m) => m.sportId === "football" && dayBucket(m.kickoff) === "Today");
     case "worldcup":
-      return matches.filter((m) => m.leagueId === "l7");
+      return all.filter((m) => m.leagueId === "l7" || m.leagueId === "l6");
     case "nba":
-      return matches.filter((m) => m.leagueId === "l8");
+      return all.filter((m) => m.sportId === "basketball" || m.leagueId === "l8");
     case "mlb":
-      return matches.filter((m) => m.leagueId === "l9");
+      return all.filter((m) => m.sportId === "baseball" || m.leagueId === "l9");
     case "tabletennis":
-      return matches.filter((m) => m.sportId === "tabletennis");
+      return all.filter((m) => m.sportId === "tabletennis" || m.sportId === "tennis");
     default:
-      return [];
+      return all;
   }
 }

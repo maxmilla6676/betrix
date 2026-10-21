@@ -401,16 +401,6 @@ function HistoryPage() {
 
                           <button
                             type="button"
-                            onClick={() => handleSimulateBet(h.code)}
-                            className="flex items-center gap-1 text-xs font-bold text-[#22c55e] hover:brightness-125 transition-all cursor-pointer"
-                            title="Toggle Cashout Available / Unavailable"
-                          >
-                            <CornerUpRight className="h-3 w-3" />
-                            <span>SIM</span>
-                          </button>
-
-                          <button
-                            type="button"
                             onClick={() => handleShareBet(h)}
                             className="text-[#22c55e] hover:scale-110 transition-transform cursor-pointer"
                             title="Share Bet"

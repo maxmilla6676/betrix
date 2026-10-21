@@ -344,40 +344,37 @@ export function PartnersPage() {
             </div>
           </div>
 
-          {/* ── INTERACTIVE USER DEPOSIT SIMULATOR ── */}
+          {/* ── EARNINGS ESTIMATOR CALCULATOR ── */}
           <div className="bg-[#14122b] border border-[#2A264F] rounded-2xl p-4 sm:p-5 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-xs font-black uppercase tracking-wider text-[#F5C400] flex items-center gap-1.5">
                   <TrendingUp className="h-4 w-4" />
-                  <span>Test Referral Attribution: Simulate Referred User Deposit</span>
+                  <span>Referral Commission Calculator</span>
                 </h3>
                 <p className="text-[11px] text-gray-400 mt-0.5">
-                  Test the real-time link attribution. Simulate a user creating an account with your link and depositing GHS.
+                  Your agreed commission rate is <span className="font-bold text-white">{activePartner.commissionRate}%</span> of every deposit made by users you refer.
                 </p>
               </div>
 
               <Badge variant="outline" className="text-[10px] font-bold text-gray-400 border-gray-700 w-fit">
-                Live Calculator
+                Live Rate
               </Badge>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
               {[100, 250, 500, 1000].map((amt) => {
                 const previewCut = amt * (activePartner.commissionRate / 100);
                 return (
-                  <Button
+                  <div
                     key={amt}
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleSimulateDeposit(amt)}
-                    className="border-[#2A264F] bg-[#1C1936] text-white hover:bg-[#282452] hover:border-[#F5C400] text-xs font-bold h-9 rounded-xl px-3.5 flex items-center gap-1.5"
+                    className="border border-[#2A264F] bg-[#1C1936] rounded-xl p-2.5 text-center"
                   >
-                    <span>+GHS {amt} Deposit</span>
-                    <span className="text-emerald-400 font-mono text-[10px]">
-                      (+GHS {previewCut.toFixed(2)} earn)
-                    </span>
-                  </Button>
+                    <span className="text-xs font-bold text-gray-300">GHS {amt} Deposit</span>
+                    <p className="text-emerald-400 font-mono font-bold text-xs mt-0.5">
+                      +GHS {previewCut.toFixed(2)} earn
+                    </p>
+                  </div>
                 );
               })}
             </div>
@@ -400,15 +397,8 @@ export function PartnersPage() {
                 <Users2 className="h-8 w-8 text-gray-600 mx-auto" />
                 <p className="font-bold text-white">No deposits registered yet</p>
                 <p className="text-gray-400 max-w-sm mx-auto">
-                  When users register using your unique link <span className="font-mono text-[#F5C400]">{activePartner.code}</span> and deposit, their deposits and your commission cut will appear here in real time.
+                  When users register using your unique link <span className="font-mono text-[#F5C400]">{activePartner.code}</span> and complete deposits via the gateway, their transactions and your commission earnings will appear here in real time.
                 </p>
-                <Button
-                  size="sm"
-                  onClick={() => handleSimulateDeposit(500)}
-                  className="bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs h-9 rounded-xl mt-2"
-                >
-                  Simulate GHS 500 First Deposit
-                </Button>
               </div>
             ) : (
               <div className="bg-[#1C1936] border border-[#2A264F] rounded-2xl overflow-hidden divide-y divide-[#262247] shadow-lg">

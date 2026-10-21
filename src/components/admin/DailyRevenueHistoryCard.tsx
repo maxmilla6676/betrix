@@ -197,9 +197,9 @@ export function DailyRevenueHistoryCard() {
         })}
       </div>
 
-      {/* Date Detail Drawer / Quick Simulation when a day is selected */}
+      {/* Date Detail Drawer when a day is selected */}
       {inspectedDay && activeStats && (
-        <div className="mt-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-2 animate-in fade-in-50">
+        <div className="mt-3 p-3.5 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5 animate-in fade-in-50">
           <div className="flex items-center justify-between">
             <span className="font-bold text-gray-700">
               Transactions on {inspectedDay}:
@@ -208,24 +208,9 @@ export function DailyRevenueHistoryCard() {
               {formatGHC(activeStats.totalRevenue)} ({activeStats.transactionsCount} deposits)
             </span>
           </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-[11px] text-gray-500 font-medium">Test Revenue:</span>
-            <button
-              type="button"
-              onClick={() => handleSimulate(inspectedDay, 500)}
-              className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-700 font-bold text-[10px] flex items-center gap-1 active:scale-95"
-            >
-              <Plus className="h-3 w-3 text-emerald-600" /> +GH₵500
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSimulate(inspectedDay, 2000)}
-              className="px-2 py-1 bg-white hover:bg-gray-100 border border-gray-200 rounded-lg text-gray-700 font-bold text-[10px] flex items-center gap-1 active:scale-95"
-            >
-              <Plus className="h-3 w-3 text-emerald-600" /> +GH₵2,000
-            </button>
-          </div>
+          <p className="text-[11px] text-gray-500">
+            Real platform settlements and verified player deposits for this date.
+          </p>
         </div>
       )}
     </div>
