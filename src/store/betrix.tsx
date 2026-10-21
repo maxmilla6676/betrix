@@ -13,6 +13,12 @@ import {
   syncSlipToBackend,
   syncPartnerToBackend,
   syncPartnerDepositToBackend,
+  syncWithdrawalToBackend,
+  syncSlipSettlementToBackend,
+  syncAdminLeagueToBackend,
+  deleteAdminLeagueFromBackend,
+  syncAdminMatchToBackend,
+  deleteAdminMatchFromBackend,
   fetchBackendInitialData,
 } from "@/services/backendSync";
 
@@ -229,24 +235,31 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
   const addAdminLeague = useCallback((l: AdminLeague) => {
     setAdminLeagues((prev) => [...prev.filter((x) => x.id !== l.id), l]);
+    syncAdminLeagueToBackend(l);
   }, []);
 
   const deleteAdminLeague = useCallback((id: string) => {
     setAdminLeagues((prev) => prev.filter((x) => x.id !== id));
+    deleteAdminLeagueFromBackend(id);
   }, []);
 
   const addAdminMatch = useCallback((m: AdminMatch) => {
     setAdminMatches((prev) => [...prev.filter((x) => x.id !== m.id), m]);
+    syncAdminMatchToBackend(m);
   }, []);
 
   const deleteAdminMatch = useCallback((id: string) => {
     setAdminMatches((prev) => prev.filter((x) => x.id !== id));
+    deleteAdminMatchFromBackend(id);
   }, []);
 
   const updateAdminMatch = useCallback((m: Partial<AdminMatch> & { id: string }) => {
-    setAdminMatches((prev) =>
-      prev.map((item) => (item.id === m.id ? { ...item, ...m } : item))
-    );
+    setAdminMatches((prev) => {
+      const updated = prev.map((item) => (item.id === m.id ? { ...item, ...m } : item));
+      const full = updated.find((item) => item.id === m.id);
+      if (full) syncAdminMatchToBackend(full);
+      return updated;
+    });
   }, []);
 
   // Periodic real-time tick to update live match clocks and score transitions every 15s
@@ -377,9 +390,16 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (remote.partnerDeposits && remote.partnerDeposits.length > 0) {
           setPartnerDeposits(remote.partnerDeposits);
         }
+        if (remote.adminLeagues && remote.adminLeagues.length > 0) {
+          setAdminLeagues(remote.adminLeagues);
+        }
+        if (remote.adminMatches && remote.adminMatches.length > 0) {
+          setAdminMatches(remote.adminMatches);
+        }
       }
     });
   }, []);
+
 
   useEffect(() => {
     try {
@@ -417,9 +437,17 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   ]);
 
   const updatePartnerCommission = useCallback((partnerId: string, newRate: number) => {
-    setPartnersList((prev) =>
-      prev.map((p) => (p.id === partnerId ? { ...p, commissionRate: Math.max(0, Math.min(100, newRate)) } : p))
-    );
+    setPartnersList((prev) => {
+      const updated = prev.map((p) => {
+        if (p.id === partnerId) {
+          const u = { ...p, commissionRate: Math.max(0, Math.min(100, newRate)) };
+          syncPartnerToBackend(u);
+          return u;
+        }
+        return p;
+      });
+      return updated;
+    });
   }, []);
 
   const registerPartner = useCallback(
@@ -518,6 +546,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
             status: "REJECTED",
             notes: reason !== undefined ? reason : p.notes,
           };
+          syncPartnerToBackend(updated);
           return updated;
         }
         return p;
@@ -530,12 +559,14 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       setPartnersList((prev) =>
         prev.map((p) => {
           if (p.id === partnerCodeOrId || p.code.toUpperCase() === partnerCodeOrId.toUpperCase()) {
-            return {
+            const updated = {
               ...p,
               totalDeposits: p.totalDeposits + amount,
               activeUsers: p.activeUsers + 1,
               signups: Math.max(p.signups, p.activeUsers + 1),
             };
+            syncPartnerToBackend(updated);
+            return updated;
           }
           return p;
         })
@@ -559,9 +590,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         commissionEarned: cut,
         date: "Just now",
         status: "Completed",
+        createdAt: new Date().toISOString(),
       };
 
       setPartnerDeposits((prev) => [newDep, ...prev]);
+      syncPartnerDepositToBackend(newDep);
     },
     [partnersList]
   );
@@ -872,17 +905,16 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       return prev - amount;
     });
     const ref = `WTH-GHS-${amount}-${Math.floor(1000 + Math.random() * 9000)}`;
-    setTransactions((prev) => [
-      {
-        id: `TX-WTH-${Date.now()}`,
-        type: "WITHDRAWAL",
-        amount,
-        method: `${method} (${accountDetails || "MoMo"})`,
-        reference: ref,
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
+    const wthTx: TransactionRecord = {
+      id: `TX-WTH-${Date.now()}`,
+      type: "WITHDRAWAL",
+      amount,
+      method: `${method} (${accountDetails || "MoMo"})`,
+      reference: ref,
+      createdAt: new Date().toISOString(),
+    };
+    setTransactions((prev) => [wthTx, ...prev]);
+    syncWithdrawalToBackend(wthTx, phone);
     setNotifications((prev) => [
       {
         id: `NOTIF-WTH-${Date.now()}`,
@@ -895,7 +927,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ...prev,
     ]);
     return success;
-  }, []);
+  }, [phone]);
 
   const settleBet = useCallback((code: string, outcome: "WON" | "LOST" = "WON") => {
     setHistory((prev) => {
@@ -903,18 +935,19 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (entry.code !== code || entry.status !== "PENDING") return entry;
         const potWin = entry.potWin ?? Number((entry.stake * entry.selections.reduce((acc, s) => acc * s.multiplier, 1)).toFixed(2));
         if (outcome === "WON") {
+          const settledEntry = { ...entry, status: "WON" as const, payout: potWin };
+          syncSlipSettlementToBackend(settledEntry, phone);
           setBalance((prevBal) => Number((prevBal + potWin).toFixed(2)));
-          setTransactions((t) => [
-            {
-              id: `TX-WIN-${entry.code}-${Date.now()}`,
-              type: "PAYOUT",
-              amount: potWin,
-              method: "Winning Bet Payout",
-              reference: entry.code,
-              createdAt: new Date().toISOString(),
-            },
-            ...t,
-          ]);
+          const payoutTx: TransactionRecord = {
+            id: `TX-WIN-${entry.code}-${Date.now()}`,
+            type: "PAYOUT",
+            amount: potWin,
+            method: "Winning Bet Payout",
+            reference: entry.code,
+            createdAt: new Date().toISOString(),
+          };
+          setTransactions((t) => [payoutTx, ...t]);
+          syncDepositToBackend(payoutTx, phone);
           setNotifications((n) => [
             {
               id: `NOTIF-WIN-${entry.code}-${Date.now()}`,
@@ -927,14 +960,16 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
             ...n,
           ]);
           toast.success(`🎉 Bet Won! GHS ${potWin.toFixed(2)} credited to your account!`, { duration: 6000 });
-          return { ...entry, status: "WON" as const, payout: potWin };
+          return settledEntry;
         } else {
+          const settledEntry = { ...entry, status: "LOST" as const, payout: 0 };
+          syncSlipSettlementToBackend(settledEntry, phone);
           toast.info(`Slip ${entry.code} settled as LOST.`);
-          return { ...entry, status: "LOST" as const, payout: 0 };
+          return settledEntry;
         }
       });
     });
-  }, []);
+  }, [phone]);
 
   // ── Auto-settle PENDING bets when all selections' matches finish ──
   useEffect(() => {
@@ -942,6 +977,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       let changed = false;
       let totalCredited = 0;
       const winningEntries: { code: string; payout: number }[] = [];
+      const settledEntries: HistoryEntry[] = [];
 
       const settled = prevHistory.map((entry) => {
         if (entry.status !== "PENDING") return entry;
@@ -965,27 +1001,33 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
         if (allWon) {
           totalCredited += potWin;
           winningEntries.push({ code: entry.code, payout: potWin });
-          return { ...entry, status: "WON" as const, payout: potWin };
+          const won = { ...entry, status: "WON" as const, payout: potWin };
+          settledEntries.push(won);
+          return won;
         } else {
-          return { ...entry, status: "LOST" as const, payout: 0 };
+          const lost = { ...entry, status: "LOST" as const, payout: 0 };
+          settledEntries.push(lost);
+          return lost;
         }
       });
 
       if (changed) {
+        // Sync all settled slips to Supabase
+        settledEntries.forEach((e) => syncSlipSettlementToBackend(e, phone));
+
         if (totalCredited > 0) {
           setBalance((prevBal) => Number((prevBal + totalCredited).toFixed(2)));
           winningEntries.forEach(({ code, payout }) => {
-            setTransactions((t) => [
-              {
-                id: `TX-WIN-${code}-${Date.now()}`,
-                type: "PAYOUT",
-                amount: payout,
-                method: "Winning Bet Payout",
-                reference: code,
-                createdAt: new Date().toISOString(),
-              },
-              ...t,
-            ]);
+            const payoutTx: TransactionRecord = {
+              id: `TX-WIN-${code}-${Date.now()}`,
+              type: "PAYOUT",
+              amount: payout,
+              method: "Winning Bet Payout",
+              reference: code,
+              createdAt: new Date().toISOString(),
+            };
+            setTransactions((t) => [payoutTx, ...t]);
+            syncDepositToBackend(payoutTx, phone);
             setNotifications((n) => [
               {
                 id: `NOTIF-WIN-${code}-${Date.now()}`,
@@ -1004,7 +1046,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       }
       return prevHistory;
     });
-  }, [allMatches, tick]);
+  }, [allMatches, tick, phone]);
+
 
   const value: BetrixState = {
     profile: {

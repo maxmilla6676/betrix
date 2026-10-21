@@ -39,6 +39,7 @@ export interface PartnerDepositRecord {
   commissionEarned: number;
   date: string;
   status: "Completed" | "Pending";
+  createdAt?: string;
 }
 
 export const adminUsers: AdminUser[] = [];
