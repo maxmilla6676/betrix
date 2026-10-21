@@ -58,10 +58,9 @@ function HistoryPage() {
     deposit,
     balance,
     loadSlip,
-    clearAllOpenBets,
-    loadDemoOngoingBets,
     toggleCashoutAvailable,
   } = useBetrix();
+
 
   // Top Tabs: 'open' | 'history'
   const [mainTab, setMainTab] = useState<"open" | "history">("open");
@@ -580,17 +579,6 @@ function HistoryPage() {
                 <span className="text-gray-400">
                   Showing {filteredOpenBets.length} ongoing stakes
                 </span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={clearAllOpenBets}
-                    className="h-7 text-[11px] font-bold border-[#273040] bg-[#181d26] text-gray-300 hover:text-white hover:bg-[#222938]"
-                  >
-                    Clear Bets (View Empty State)
-                  </Button>
-                </div>
               </div>
             </div>
           ) : (
@@ -611,19 +599,8 @@ function HistoryPage() {
                 <p className="mt-0.5 text-xs text-gray-400 font-semibold">
                   Get started with popular codes!
                 </p>
-
-                {/* Quick switch to reload ongoing bets screenshot */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={loadDemoOngoingBets}
-                  className="mt-3 h-7 text-[11px] font-bold border-[#273040] bg-[#181d26] text-[#22c55e] hover:bg-[#222938]"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Load Ongoing Bets (Screenshot Demo)
-                </Button>
               </div>
+
 
               {/* Recommended Football Codes Accordion Section */}
               <div className="w-full space-y-3">

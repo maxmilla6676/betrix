@@ -24,6 +24,7 @@ import {
   fetchUserProfileFromBackend,
   fetchUserDataFromBackend,
 } from "@/services/backendSync";
+import { createSeevPayout } from "@/services/seevplus";
 
 
 export type { AdminLeague, AdminMatch };
@@ -69,10 +70,12 @@ export interface Profile {
   userId: string;
   verified: boolean;
   tier: string;
+  role?: string; // "USER" | "ADMIN"
   memberSince: string;
   status: string;
   nextUpdateDate: string;
 }
+
 
 export interface TransactionRecord {
   id: string;
@@ -168,7 +171,11 @@ interface BetrixState {
   addAdminMatch: (m: AdminMatch) => void;
   deleteAdminMatch: (id: string) => void;
   updateAdminMatch: (m: Partial<AdminMatch> & { id: string }) => void;
+  // Auth & Admin roles
+  isAdmin: boolean;
+  refreshProfile: () => Promise<void>;
 }
+
 
 const Ctx = createContext<BetrixState | null>(null);
 const STORAGE_KEY = "betrix.state.v7";
@@ -209,15 +216,57 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     return false;
   });
 
-  const [profileData, setProfileData] = useState<Profile>(() => ({
-    phone: "",
-    userId: "6939B805",
-    verified: true,
-    tier: "BRONZE I",
-    memberSince: new Date().getFullYear().toString(),
-    status: "Active",
-    nextUpdateDate: "Next Month",
-  }));
+  const [profileData, setProfileData] = useState<Profile>(() => {
+    if (typeof window === "undefined") {
+      return {
+        phone: "",
+        userId: "6939B805",
+        verified: true,
+        tier: "BRONZE I",
+        role: "USER",
+        memberSince: new Date().getFullYear().toString(),
+        status: "Active",
+        nextUpdateDate: "Next Month",
+      };
+    }
+    try {
+      const raw = localStorage.getItem("betrix.profile.v1");
+      if (raw) return JSON.parse(raw);
+    } catch {}
+    return {
+      phone: "",
+      userId: "6939B805",
+      verified: true,
+      tier: "BRONZE I",
+      role: "USER",
+      memberSince: new Date().getFullYear().toString(),
+      status: "Active",
+      nextUpdateDate: "Next Month",
+    };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("betrix.profile.v1", JSON.stringify(profileData));
+    } catch {}
+  }, [profileData]);
+
+  const refreshProfile = useCallback(async () => {
+    if (!phone) return;
+    const uProf = await fetchUserProfileFromBackend(phone);
+    if (uProf) {
+      if (typeof uProf.balance === "number") setBalance(uProf.balance);
+      setProfileData((prev) => ({
+        ...prev,
+        ...uProf,
+      }));
+    }
+  }, [phone]);
+
+  const isAdmin = useMemo(() => {
+    return (profileData.role || "").toUpperCase() === "ADMIN";
+  }, [profileData.role]);
+
 
 
   // Admin Match & League Management
@@ -785,12 +834,14 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
           phone: p,
           userId: extraProfile.userId || prev.userId,
           tier: extraProfile.tier || prev.tier,
+          role: extraProfile.role || prev.role || "USER",
           memberSince: extraProfile.memberSince || prev.memberSince,
         }));
         if (typeof extraProfile.balance === "number") {
           setBalance(extraProfile.balance);
         }
       }
+
       // Load user transactions and slips from Supabase
       fetchUserDataFromBackend(p).then((res) => {
         if (res) {
@@ -978,33 +1029,63 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   );
 
   const withdraw = useCallback((amount: number, method = "Mobile Money", accountDetails?: string) => {
+    // 1. Pre-check balance before modifying state
+    // We do a synchronous read via the set callback trick
     let success = false;
+    let newBalance = 0;
     setBalance((prev) => {
       if (prev < amount) {
         success = false;
         return prev;
       }
       success = true;
-      const next = Number((prev - amount).toFixed(2));
-      syncUserProfileBalance(phone, next);
-      return next;
+      newBalance = Number((prev - amount).toFixed(2));
+      syncUserProfileBalance(phone, newBalance);
+      return newBalance;
     });
+
+    if (!success) return false;
+
     const ref = `WTH-GHS-${amount}-${Math.floor(1000 + Math.random() * 9000)}`;
     const wthTx: TransactionRecord = {
       id: `TX-WTH-${Date.now()}`,
       type: "WITHDRAWAL",
       amount,
-      method: `${method} (${accountDetails || "MoMo"})`,
+      method: `${method} (${accountDetails || phone || "MoMo"})`,
       reference: ref,
       createdAt: new Date().toISOString(),
     };
     setTransactions((prev) => [wthTx, ...prev]);
     syncWithdrawalToBackend(wthTx, phone);
+
+    // 2. Initiate the real SeevPlus payout — fire and handle async
+    createSeevPayout({
+      amount,
+      phone: accountDetails || phone || "",
+      accountName: profile.userId || "Betrix User",
+      method,
+      metadata: { reference: ref, user_phone: phone },
+    }).then((payoutRes) => {
+      if (!payoutRes.success) {
+        // Refund the balance if gateway rejected the payout
+        setBalance((prev) => {
+          const refunded = Number((prev + amount).toFixed(2));
+          syncUserProfileBalance(phone, refunded);
+          return refunded;
+        });
+        // Remove the failed withdrawal transaction
+        setTransactions((prev) => prev.filter((t) => t.id !== wthTx.id));
+        toast.error(`Withdrawal failed: ${payoutRes.error || "Gateway error"}. Your balance has been restored.`);
+      } else {
+        toast.success(`GHS ${amount.toFixed(2)} payout initiated via SeevPlus. Ref: ${payoutRes.reference || ref}`);
+      }
+    });
+
     setNotifications((prev) => [
       {
         id: `NOTIF-WTH-${Date.now()}`,
-        title: "Withdrawal Sent",
-        body: `GHS ${amount.toFixed(2)} requested via ${method}. Ref: ${ref}`,
+        title: "Withdrawal Requested",
+        body: `GHS ${amount.toFixed(2)} payout initiated via ${method}. Ref: ${ref} — processing via SeevPlus Gateway.`,
         time: "just now",
         read: false,
         kind: "system",
@@ -1012,7 +1093,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ...prev,
     ]);
     return success;
-  }, [phone]);
+  }, [phone, profile.userId]);
 
   const settleBet = useCallback((code: string, outcome: "WON" | "LOST" = "WON") => {
     setHistory((prev) => {
@@ -1150,10 +1231,12 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       userId: profileData.userId,
       verified: profileData.verified,
       tier: profileData.tier,
+      role: (profileData.role || "USER").toUpperCase(),
       memberSince: profileData.memberSince,
       status: profileData.status || "Active",
       nextUpdateDate: profileData.nextUpdateDate || "Next Month",
     },
+
 
     points: balance,
     balance,
@@ -1220,7 +1303,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     addAdminMatch,
     deleteAdminMatch,
     updateAdminMatch,
+    // Auth & Admin roles
+    isAdmin,
+    refreshProfile,
   };
+
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

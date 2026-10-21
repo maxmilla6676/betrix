@@ -327,6 +327,7 @@ export async function registerUserInBackend(rawPhone: string, password: string, 
       phone,
       password_hash: passwordHash,
       tier: "Bronze",
+      role: "USER",
       balance: 0.00,
       verified: true,
       created_at: new Date().toISOString(),
@@ -343,6 +344,7 @@ export async function registerUserInBackend(rawPhone: string, password: string, 
           userId,
           phone,
           tier: "Bronze",
+          role: "USER",
           balance: 0.00,
           verified: true,
           memberSince: new Date().getFullYear().toString(),
@@ -356,6 +358,7 @@ export async function registerUserInBackend(rawPhone: string, password: string, 
         userId: data?.user_id || userId,
         phone: data?.phone || phone,
         tier: data?.tier || "Bronze",
+        role: (data?.role || "USER").toUpperCase(),
         balance: Number(data?.balance ?? 0),
         verified: !!data?.verified,
         memberSince: new Date(data?.created_at || Date.now()).getFullYear().toString(),
@@ -406,6 +409,7 @@ export async function authenticateUserInBackend(rawPhone: string, password: stri
         userId: profile.user_id,
         phone: profile.phone,
         tier: profile.tier || "Bronze",
+        role: (profile.role || "USER").toUpperCase(),
         balance: Number(profile.balance ?? 0),
         verified: !!profile.verified,
         memberSince: new Date(profile.created_at || Date.now()).getFullYear().toString(),
@@ -433,6 +437,7 @@ export async function fetchUserProfileFromBackend(rawPhone: string) {
       userId: data.user_id,
       phone: data.phone,
       tier: data.tier || "Bronze",
+      role: (data.role || "USER").toUpperCase(),
       balance: Number(data.balance ?? 0),
       verified: !!data.verified,
       memberSince: new Date(data.created_at || Date.now()).getFullYear().toString(),
@@ -442,6 +447,7 @@ export async function fetchUserProfileFromBackend(rawPhone: string) {
     return null;
   }
 }
+
 
 /** Update user's real balance in Supabase profiles */
 export async function syncUserProfileBalance(rawPhone: string, balance: number) {

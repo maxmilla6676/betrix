@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   phone text UNIQUE NOT NULL,
   password_hash text,
   tier text DEFAULT 'Bronze',
+  role text DEFAULT 'USER', -- 'USER' | 'ADMIN'
   balance numeric DEFAULT 0.00,
   verified boolean DEFAULT true,
   created_at timestamptz DEFAULT now(),
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 
 -- Ensure columns exist if table was already created
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS password_hash text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS role text DEFAULT 'USER';
 DO $$ 
 BEGIN 
   IF NOT EXISTS (
@@ -23,6 +25,7 @@ BEGIN
     ALTER TABLE public.profiles ADD CONSTRAINT profiles_phone_key UNIQUE (phone);
   END IF; 
 END $$;
+
 
 CREATE TABLE IF NOT EXISTS public.transactions (
   id text PRIMARY KEY,

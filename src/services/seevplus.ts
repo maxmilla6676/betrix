@@ -100,6 +100,69 @@ export async function createSeevCheckout(
   }
 }
 
+export interface SeevPayoutParams {
+  amount: number; // in GHS
+  currency?: "GHS" | "USD";
+  phone: string;
+  accountName?: string;
+  method?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SeevPayoutResult {
+  success: boolean;
+  payoutId?: string;
+  reference?: string;
+  status?: string;
+  error?: string;
+}
+
+/**
+ * Initiate a real payout (withdrawal) via SeevPlus
+ */
+export async function createSeevPayout(
+  params: SeevPayoutParams
+): Promise<SeevPayoutResult> {
+  try {
+    const response = await fetch("/api/seevplus/payout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: params.amount,
+        currency: params.currency || "GHS",
+        phone: params.phone,
+        accountName: params.accountName || "Betrix User",
+        method: params.method || "Mobile Money",
+        metadata: {
+          ...params.metadata,
+          source: "betrix_sportsbook_withdrawal",
+          phone: params.phone,
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      return {
+        success: false,
+        error: data.error || `Payout gateway returned status ${response.status}`,
+      };
+    }
+
+    return {
+      success: true,
+      payoutId: data.payoutId,
+      reference: data.reference,
+      status: data.status || "pending",
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Failed to connect to SeevPlus payout gateway";
+    return { success: false, error: msg };
+  }
+}
+
 /**
  * Verify a SeevPlus transaction status by ID or Reference
  */

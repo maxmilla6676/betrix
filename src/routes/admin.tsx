@@ -33,7 +33,10 @@ import {
   Plus,
   RotateCcw,
   Trophy,
+  ShieldAlert,
+  LogIn,
 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -86,7 +89,13 @@ function AdminPage() {
   const [showDailyHistory, setShowDailyHistory] = useState(true);
   const [activeTab, setActiveTab] = useState<AdminNavTab>("payments");
 
+  const [isRefreshingRole, setIsRefreshingRole] = useState(false);
+
   const {
+    isLoggedIn,
+    isAdmin,
+    profile,
+    refreshProfile,
     totalRevenue,
     todayRevenue,
     devCommission,
@@ -94,11 +103,9 @@ function AdminPage() {
     totalUsersCount,
     activeAnalysesCount,
     pendingPaymentsCount,
-    resetAllStatsToZero,
-    loadScreenshotStats,
-    simulateDeposit,
     transactions,
     history,
+
     partnersList,
     updatePartnerCommission,
     approvePartner,
@@ -113,6 +120,123 @@ function AdminPage() {
     enableLiveApi,
     setEnableLiveApi,
   } = useBetrix();
+
+  // ── Protection Gate 1: Not Logged In ──
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-[#0e0e11] text-white flex flex-col items-center justify-center p-4 selection:bg-[#F5C400] selection:text-black">
+        <div className="max-w-md w-full bg-[#16161c] border border-[#252532] rounded-3xl p-8 text-center shadow-2xl space-y-4">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-[#F5C400]">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+          <h2 className="text-xl font-black text-white">Authentication Required</h2>
+          <p className="text-xs text-gray-400 font-medium leading-relaxed">
+            You must be logged into an authorized Administrator account to view the BETRIX console.
+          </p>
+          <div className="pt-2 flex flex-col gap-2">
+            <Link
+              to="/auth"
+              search={{ redirect: "/admin" }}
+              className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
+            >
+              <LogIn className="h-4 w-4" /> Log In as Administrator
+            </Link>
+            <Link
+              to="/"
+              className="text-xs text-gray-400 hover:text-white font-bold py-2 text-center"
+            >
+              ← Return to Sportsbook
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Protection Gate 2: Logged In, but Role is not ADMIN in Supabase ──
+  if (!isAdmin) {
+    const handleRecheck = async () => {
+      setIsRefreshingRole(true);
+      try {
+        await refreshProfile();
+        toast.info("Profile reloaded from Supabase.");
+      } catch {
+        toast.error("Failed to re-check permissions.");
+      } finally {
+        setIsRefreshingRole(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-[#0e0e11] text-white flex flex-col items-center justify-center p-4 selection:bg-[#F5C400] selection:text-black">
+        <div className="max-w-lg w-full bg-[#16161c] border border-rose-500/30 rounded-3xl p-8 text-center shadow-2xl space-y-5 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-amber-500 to-rose-500" />
+          
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500">
+            <ShieldAlert className="h-8 w-8" />
+          </div>
+
+          <div className="space-y-1">
+            <h2 className="text-2xl font-black text-white tracking-tight">Access Restricted</h2>
+            <p className="text-xs font-bold text-rose-400 uppercase tracking-widest">
+              403 Forbidden · Administrator Role Required
+            </p>
+          </div>
+
+          <div className="bg-[#1e1e28] border border-[#2d2d3c] rounded-2xl p-4 text-left space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 font-semibold">Account Phone:</span>
+              <span className="font-mono font-bold text-white">+{profile.phone || "Unknown"}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 font-semibold">Current Supabase Role:</span>
+              <span className="px-2 py-0.5 rounded-md font-mono font-black text-xs bg-gray-700/50 text-gray-300">
+                {profile.role || "USER"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-400 font-semibold">Required Role:</span>
+              <span className="px-2 py-0.5 rounded-md font-mono font-black text-xs bg-[#F5C400]/10 text-[#F5C400] border border-[#F5C400]/30">
+                ADMIN
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3.5 text-left text-xs text-amber-200/90 leading-relaxed">
+            <p className="font-bold text-amber-300 mb-1 flex items-center gap-1.5">
+              <span>💡</span> How to grant admin access in Supabase:
+            </p>
+            <ol className="list-decimal list-inside space-y-1 text-[11px] text-gray-300">
+              <li>Open your <strong>Supabase Dashboard</strong> → <strong>Table Editor</strong>.</li>
+              <li>Select the <strong>profiles</strong> table.</li>
+              <li>Find the row for phone <strong>{profile.phone}</strong>.</li>
+              <li>Double-click the <strong>role</strong> column and change it to <strong>ADMIN</strong>.</li>
+              <li>Click the button below to re-check your role immediately.</li>
+            </ol>
+          </div>
+
+          <div className="pt-2 flex flex-col gap-2.5">
+            <Button
+              type="button"
+              onClick={handleRecheck}
+              disabled={isRefreshingRole}
+              className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95"
+            >
+              <RefreshCw className={cn("h-4 w-4", isRefreshingRole && "animate-spin")} />
+              <span>{isRefreshingRole ? "Checking Supabase..." : "Re-Check Permission"}</span>
+            </Button>
+            <Link
+              to="/"
+              className="text-xs text-gray-400 hover:text-white font-bold py-2 text-center"
+            >
+              ← Return to Sportsbook
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   const pendingPartners = partnersList.filter((p) => p.status === "PENDING");
   const approvedPartners = partnersList.filter((p) => p.status !== "PENDING");
@@ -149,17 +273,8 @@ function AdminPage() {
     toast.error(`Partner application for ${partnerName} rejected.`);
   };
 
-  const handleResetStats = () => {
-    resetAllStatsToZero();
-    toast.success("All platform revenue, stat cards, and metrics reset to GH₵0.");
-  };
-
-  const handleRestoreScreenshotStats = () => {
-    loadScreenshotStats();
-    toast.success("Loaded reference stats matching the screenshot!");
-  };
-
   const filteredUsers = adminUsers.filter((u) =>
+
     `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase())
   );
 

@@ -55,14 +55,12 @@ export function PaymentGatewayModal({
   // Gateway Step state: "input" | "processing" | "checkout_redirect" | "prompt" | "success"
   const [step, setStep] = useState<"input" | "processing" | "checkout_redirect" | "prompt" | "success">("input");
   const [txRef, setTxRef] = useState<string>("");
-  const [pin, setPin] = useState<string>("");
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState<boolean>(false);
 
   const resetFlow = () => {
     setStep("input");
-    setPin("");
     setCheckoutUrl(null);
     setPaymentId(null);
     setIsPolling(false);
@@ -163,14 +161,18 @@ export function PaymentGatewayModal({
     }
   };
 
-  const handleAuthorizePayment = () => {
+  const handleAuthorizePayment = async () => {
     setStep("processing");
-
-    setTimeout(() => {
+    const verifyRes = await verifySeevPayment(paymentId || undefined, txRef);
+    if (verifyRes.verified) {
       deposit(amount, `SeevPlus · ${getMethodName(method)}`, txRef);
       setStep("success");
-      toast.success(`Deposit of GHS ${amount.toFixed(2)} successful! Balance updated.`);
-    }, 1500);
+      toast.success(`Deposit of GHS ${amount.toFixed(2)} confirmed and credited!`);
+    } else {
+      // Not yet verified — go back to prompt for user to try again
+      setStep("prompt");
+      toast.info("Payment not yet confirmed. Please approve the prompt on your phone, then click Verify.");
+    }
   };
 
   const handleManualVerify = async () => {
@@ -470,9 +472,14 @@ export function PaymentGatewayModal({
                   <Smartphone className="h-6 w-6" />
                 </div>
                 <div>
-                  <h4 className="font-black text-base text-white">Mobile Money Prompt Sent</h4>
+                  <h4 className="font-black text-base text-white">Approve on Your Phone</h4>
                   <p className="text-xs text-gray-300 mt-1">
-                    An authorization request for <span className="font-mono font-bold text-[#F5C400]">GHS {amount.toFixed(2)}</span> has been sent to <span className="font-mono font-bold text-white">{phone}</span>.
+                    A Mobile Money authorization for{" "}
+                    <span className="font-mono font-bold text-[#F5C400]">GHS {amount.toFixed(2)}</span> has been sent to{" "}
+                    <span className="font-mono font-bold text-white">{phone}</span>.
+                  </p>
+                  <p className="text-xs text-amber-400 font-bold mt-2">
+                    Please approve the prompt on your phone, then click Verify below.
                   </p>
                 </div>
                 <div className="bg-[#14141a] p-3 rounded-xl text-left border border-[#2a2a38] space-y-1 text-xs">
@@ -492,26 +499,12 @@ export function PaymentGatewayModal({
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider block text-center">
-                  Enter 4-Digit MoMo PIN to Confirm
-                </label>
-                <Input
-                  type="password"
-                  maxLength={4}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
-                  className="bg-[#1c1c24] border-[#2a2a38] text-white font-mono text-center text-xl font-black tracking-[0.5em] h-12 rounded-xl focus:border-[#F5C400]"
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Button
                   type="button"
                   onClick={handleAuthorizePayment}
-                  className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-12 rounded-xl uppercase tracking-wider shadow-lg"
+                  className="w-full bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-sm h-12 rounded-xl uppercase tracking-wider shadow-lg flex items-center justify-center gap-2"
                 >
-                  Approve & Pay GHS {amount.toFixed(2)}
+                  <RefreshCw className="h-4 w-4" /> I approved — Verify Payment
                 </Button>
                 <Button
                   type="button"
