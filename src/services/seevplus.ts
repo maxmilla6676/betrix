@@ -12,6 +12,7 @@ export interface SeevPaymentInitParams {
   name?: string;
   email?: string;
   method?: string;
+  subaccount?: string;
   redirectUrl?: string;
   metadata?: Record<string, unknown>;
 }
@@ -56,6 +57,7 @@ export async function createSeevCheckout(
         email: params.email || `user.${params.phone.replace(/\D/g, "")}@betrix.hub`,
         reference: generatedRef,
         method: params.method || "MoMo",
+        subaccount: params.subaccount,
         redirectUrl:
           params.redirectUrl ||
           (typeof window !== "undefined"

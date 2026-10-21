@@ -68,7 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // SeevPlus expects amounts in smallest currency units (e.g., pesewas/cents: 10 GHS = 1000 pesewas)
     const amountInSmallestUnit = Math.round(Number(amount) * 100);
 
-    const payload = {
+    const subaccountCode =
+      body.subaccount ||
+      process.env.SEEV_SUBACCOUNT_CODE ||
+      process.env.VITE_SEEV_SUBACCOUNT_CODE;
+
+    const payload: Record<string, unknown> = {
       type: "checkout",
       amount: amountInSmallestUnit,
       currency: currency.toUpperCase(),
@@ -84,6 +89,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ...(metadata || {}),
       },
     };
+
+    if (subaccountCode) {
+      payload.subaccount = subaccountCode;
+    }
 
     const upstreamResponse = await fetch(`${baseUrl}/api/v1/developer/payments`, {
       method: "POST",
