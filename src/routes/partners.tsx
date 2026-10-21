@@ -99,14 +99,6 @@ export function PartnersPage() {
     setTimeout(() => setCopiedCode(false), 2500);
   };
 
-  const handleSimulateDeposit = (amt: number) => {
-    simulateUserDepositForPartner(activePartner.id, amt);
-    const cut = amt * (activePartner.commissionRate / 100);
-    toast.success(
-      `Simulated user deposit of GHS ${amt.toFixed(2)}! You earned +GHS ${cut.toFixed(2)} commission.`
-    );
-  };
-
   return (
     <div className="space-y-6 p-3 md:p-6 max-w-5xl mx-auto">
       {/* ── TOP BANNER & PARTNER ACCOUNT SWITCHER ── */}

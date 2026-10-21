@@ -42,10 +42,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BetrixWordmark } from "@/components/brand/Logo";
 import { EmptyState, SectionHeading } from "@/components/common/States";
-import { adminUsers, auditLog, growthSeries } from "@/data/admin";
+import { auditLog, growthSeries } from "@/data/admin";
 import { teamById, leagueById } from "@/data/football";
 import { useBetrix, formatGHS } from "@/store/betrix";
 import { FREE_SPORTS_SOURCES } from "@/services/sportsApi";
+import { fetchAllProfilesFromBackend, updateUserRoleInBackend } from "@/services/backendSync";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -90,6 +91,8 @@ function AdminPage() {
   const [activeTab, setActiveTab] = useState<AdminNavTab>("payments");
 
   const [isRefreshingRole, setIsRefreshingRole] = useState(false);
+  const [supabaseProfiles, setSupabaseProfiles] = useState<any[]>([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
 
   const {
     isLoggedIn,
@@ -273,9 +276,35 @@ function AdminPage() {
     toast.error(`Partner application for ${partnerName} rejected.`);
   };
 
-  const filteredUsers = adminUsers.filter((u) =>
+  const loadProfiles = async () => {
+    setLoadingProfiles(true);
+    const data = await fetchAllProfilesFromBackend();
+    setSupabaseProfiles(data);
+    setLoadingProfiles(false);
+  };
 
-    `${u.name} ${u.username} ${u.email}`.toLowerCase().includes(q.trim().toLowerCase())
+  useEffect(() => {
+    loadProfiles();
+  }, []);
+
+  const handleToggleRole = async (phone: string, currentRole: string) => {
+    const newRole = currentRole === "ADMIN" ? "USER" : "ADMIN";
+    const res = await updateUserRoleInBackend(phone, newRole);
+    if (res.success) {
+      toast.success(`User ${phone} role changed to ${newRole}!`);
+      setSupabaseProfiles((prev) =>
+        prev.map((p) => (p.phone === phone ? { ...p, role: newRole } : p))
+      );
+      if (phone === profile.phone) {
+        await refreshProfile();
+      }
+    } else {
+      toast.error(res.error || "Failed to update role");
+    }
+  };
+
+  const filteredUsers = supabaseProfiles.filter((u) =>
+    `${u.phone} ${u.userId} ${u.role}`.toLowerCase().includes(q.trim().toLowerCase())
   );
 
   const handleSaveCommission = (partnerId: string, partnerName: string) => {
@@ -745,15 +774,20 @@ function AdminPage() {
             <div className="bg-[#121216] rounded-2xl p-4 md:p-5 border border-[#2a2a35] shadow-sm space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#2a2a35] pb-3">
                 <div>
-                  <h3 className="text-sm font-black text-white">
-                    Platform Registered Members ({totalUsersCount})
+                  <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <Users2 className="h-4 w-4 text-[#E41B23]" />
+                    Supabase Registered Members ({supabaseProfiles.length})
                   </h3>
-                  <p className="text-xs text-gray-400">Inspect user accounts, active slips, and registration statuses.</p>
+                  <p className="text-xs text-gray-400">Inspect real user accounts, wallet balances, and grant or revoke ADMIN privileges.</p>
                 </div>
-                <div className="w-full sm:w-64">
-                  <Input placeholder="Search users by name, username..."
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Input placeholder="Search by phone, user ID, role..."
                     value={q} onChange={(e) => setQ(e.target.value)}
-                    className="h-8 text-xs bg-[#1e1e26] border-[#2a2a35] text-white placeholder:text-gray-500" />
+                    className="h-8 text-xs bg-[#1e1e26] border-[#2a2a35] text-white placeholder:text-gray-500 w-full sm:w-56" />
+                  <Button size="sm" variant="outline" onClick={loadProfiles} disabled={loadingProfiles}
+                    className="h-8 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white shrink-0">
+                    <RefreshCw className={cn("h-3.5 w-3.5", loadingProfiles && "animate-spin")} />
+                  </Button>
                 </div>
               </div>
               <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35] overflow-hidden">
@@ -762,21 +796,48 @@ function AdminPage() {
                     <Users2 className="h-8 w-8 mx-auto mb-2 opacity-30 text-gray-400" />
                     <p className="font-semibold text-gray-400">No registered members found</p>
                     <p className="text-[11px] text-gray-500 mt-1">
-                      {q.trim() ? "No registered members match your search criteria." : "Newly registered members will appear here in real time."}
+                      {q.trim() ? "No registered members match your search criteria." : "Newly registered members from Supabase will appear here in real time."}
                     </p>
                   </div>
                 ) : (
-                  filteredUsers.map((u) => (
-                    <div key={u.id} className="p-3 flex items-center justify-between hover:bg-[#1e1e26] transition-colors text-xs">
-                      <div>
-                        <span className="font-bold text-white">{u.name}</span>
-                        <p className="text-[11px] text-gray-500">{u.email} • Joined {u.joined}</p>
+                  filteredUsers.map((u) => {
+                    const isUserAdmin = u.role === "ADMIN";
+                    return (
+                      <div key={u.id || u.phone} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-[#1e1e26] transition-colors text-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-white text-sm">{u.phone}</span>
+                            <Badge className={cn("text-[10px] font-black uppercase px-2 py-0.5", isUserAdmin ? "bg-[#F5C400] text-black" : "bg-gray-800 text-gray-300 border border-gray-700")}>
+                              {u.role}
+                            </Badge>
+                            {u.phone === profile.phone && (
+                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-400">
+                            ID: <span className="font-mono text-gray-300">{u.userId}</span> • Wallet: <strong className="text-[#F5C400]">{formatGHC(u.balance)}</strong> • Joined {u.joined}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleToggleRole(u.phone, u.role)}
+                            className={cn(
+                              "h-7 text-xs font-bold transition-all",
+                              isUserAdmin
+                                ? "border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+                                : "border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                            )}
+                          >
+                            {isUserAdmin ? "Demote to User" : "Promote to Admin"}
+                          </Button>
+                        </div>
                       </div>
-                      <Badge variant="outline" className="text-[10px] font-bold border-[#2a2a35] text-gray-400">
-                        {u.role}
-                      </Badge>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

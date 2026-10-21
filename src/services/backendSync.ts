@@ -503,3 +503,75 @@ export async function fetchUserDataFromBackend(rawPhone: string) {
   }
 }
 
+/** Fetch all registered member profiles from Supabase for the Admin portal */
+export async function fetchAllProfilesFromBackend() {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (error || !data) return [];
+    return data.map((p: any) => ({
+      id: p.id,
+      userId: p.user_id,
+      phone: p.phone,
+      tier: p.tier || "Bronze",
+      role: (p.role || "USER").toUpperCase(),
+      balance: Number(p.balance ?? 0),
+      verified: !!p.verified,
+      createdAt: p.created_at,
+      joined: p.created_at ? new Date(p.created_at).toLocaleDateString("en-GB") : "Recently",
+    }));
+  } catch (err) {
+    console.warn("[Backend Sync] Error fetching all profiles:", err);
+    return [];
+  }
+}
+
+/** Update a user's role (USER <-> ADMIN) in Supabase profiles */
+export async function updateUserRoleInBackend(rawPhone: string, newRole: "USER" | "ADMIN") {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) return { success: false, error: "Invalid phone number" };
+  try {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ role: newRole, updated_at: new Date().toISOString() })
+      .eq("phone", phone);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to update role" };
+  }
+}
+
+/** Fetch recent community slips from Supabase for Recommended Codes */
+export async function fetchPublicSlipsFromBackend(limit = 10) {
+  try {
+    const { data, error } = await supabase
+      .from("slips")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error || !data) return [];
+    return data.map((s: any) => ({
+      code: s.code,
+      createdAt: s.created_at,
+      stake: Number(s.stake),
+      payout: Number(s.payout),
+      potWin: Number(s.pot_win),
+      status: s.status,
+      matchTitle: s.match_title,
+      selections: s.selections || [],
+    })) as HistoryEntry[];
+  } catch (err) {
+    console.warn("[Backend Sync] Error fetching public slips:", err);
+    return [];
+  }
+}
+

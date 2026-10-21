@@ -32,10 +32,7 @@ import { cn } from "@/lib/utils";
 import { GHANA_TZ } from "@/lib/ghana-time";
 import { HowToCashoutModal } from "@/components/common/HowToCashoutModal";
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
-import {
-  recommendedFootballCodes,
-  type RecommendedCode,
-} from "@/data/recommendedCodes";
+import { fetchPublicSlipsFromBackend } from "@/services/backendSync";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -98,6 +95,16 @@ function HistoryPage() {
   const [cashoutModalOpen, setCashoutModalOpen] = useState(false);
   const [depositModalOpen, setDepositModalOpen] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [communitySlips, setCommunitySlips] = useState<HistoryEntry[]>([]);
+  const [loadingCommunitySlips, setLoadingCommunitySlips] = useState(false);
+
+  useEffect(() => {
+    setLoadingCommunitySlips(true);
+    fetchPublicSlipsFromBackend(8).then((slips) => {
+      setCommunitySlips(slips);
+      setLoadingCommunitySlips(false);
+    });
+  }, []);
   const [showAutoCashoutBanner, setShowAutoCashoutBanner] = useState(true);
   // Track which ongoing bets are expanded to show match details (default BTX-ACC4 open as in screenshot)
   const [expandedBetCodes, setExpandedBetCodes] = useState<Record<string, boolean>>({
@@ -189,19 +196,23 @@ function HistoryPage() {
     toast.info(`Toggled cashout availability for ${code}!`);
   };
 
-  const handleShareCode = (codeObj: RecommendedCode) => {
-    const text = `Check out this BETRIX football booking code: ${codeObj.code} (${codeObj.folds} folds, Odds: ${codeObj.oddsDisplay})! Load it on BETRIX to win!`;
+  const handleShareCode = (slip: HistoryEntry) => {
+    const folds = slip.selections?.length || 0;
+    const odds = (slip.selections || []).reduce((acc, s) => acc * s.multiplier, 1).toFixed(2);
+    const text = `Check out this BETRIX booking code: ${slip.code} (${folds} folds, Odds: ${odds})! Load it on BETRIX to win!`;
     if (navigator.share) {
-      navigator.share({ title: `BETRIX Code: ${codeObj.code}`, text }).catch(() => {});
+      navigator.share({ title: `BETRIX Code: ${slip.code}`, text }).catch(() => {});
     } else {
       void navigator.clipboard.writeText(text);
-      toast.success(`Booking code ${codeObj.code} copied! Share it with friends.`);
+      toast.success(`Booking code ${slip.code} copied! Share it with friends.`);
     }
   };
 
-  const handleAddToBetslip = (codeObj: RecommendedCode) => {
-    loadSlip(codeObj.selections);
-    toast.success(`Loaded ${codeObj.folds} selections from code ${codeObj.code} into betslip!`);
+  const handleAddToBetslip = (slip: HistoryEntry) => {
+    if (slip.selections && slip.selections.length > 0) {
+      loadSlip(slip.selections);
+      toast.success(`Loaded ${slip.selections.length} selections from code ${slip.code} into betslip!`);
+    }
   };
 
   return (
@@ -624,115 +635,113 @@ function HistoryPage() {
 
                 {codesAccordionOpen && (
                   <div className="space-y-3">
-                    {recommendedFootballCodes.map((code) => {
-                      const displayedMatches = code.matches.slice(0, 4);
+                    {communitySlips.length === 0 ? (
+                      <div className="bg-[#181d26] rounded-xl border border-[#262f3e] p-6 text-center space-y-2">
+                        <Bookmark className="h-7 w-7 text-gray-500 mx-auto opacity-40" />
+                        <p className="text-xs font-bold text-gray-300">No community shared slips yet</p>
+                        <p className="text-[11px] text-gray-400 max-w-sm mx-auto">
+                          Place a bet on any live or scheduled match to create your custom booking code and share it here!
+                        </p>
+                        <div className="pt-2">
+                          <Link
+                            to="/matches"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#00a859] hover:bg-[#00914c] text-white text-xs font-black transition-all shadow-xs"
+                          >
+                            Browse Matches
+                          </Link>
+                        </div>
+                      </div>
+                    ) : (
+                      communitySlips.map((code) => {
+                        const folds = code.selections?.length || 0;
+                        const totalOdds = (code.selections || []).reduce((acc, s) => acc * s.multiplier, 1).toFixed(2);
+                        const displayedMatches = (code.selections || []).slice(0, 4);
 
-                      return (
-                        <div
-                          key={code.id}
-                          className="bg-[#181d26] rounded-xl border border-[#262f3e] overflow-hidden shadow-2xs"
-                        >
-                          {/* Card Header Bar (Light mint green) */}
-                          <div className="bg-[#eef8f2] px-3.5 py-2.5 flex items-center justify-between border-b border-[#ddede2]">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-black text-gray-900 tracking-wide">
-                                {code.code}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyCode(code.code)}
-                                title="Copy booking code"
-                                className="inline-flex items-center gap-1 text-[#00a859] text-xs font-black bg-white/90 border border-[#bce8cb] px-2 py-0.5 rounded shadow-2xs hover:bg-white active:scale-95 transition-all"
-                              >
-                                {copiedCode === code.code ? (
-                                  <Check className="h-3 w-3" />
-                                ) : (
-                                  <Copy className="h-3 w-3" />
-                                )}
-                                <span>{code.sharesCount}</span>
-                              </button>
+                        return (
+                          <div
+                            key={code.code}
+                            className="bg-[#181d26] rounded-xl border border-[#262f3e] overflow-hidden shadow-2xs"
+                          >
+                            {/* Card Header Bar (Light mint green) */}
+                            <div className="bg-[#eef8f2] px-3.5 py-2.5 flex items-center justify-between border-b border-[#ddede2]">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-sm font-black text-gray-900 tracking-wide">
+                                  {code.code}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyCode(code.code)}
+                                  title="Copy booking code"
+                                  className="inline-flex items-center gap-1 text-[#00a859] text-xs font-black bg-white/90 border border-[#bce8cb] px-2 py-0.5 rounded shadow-2xs hover:bg-white active:scale-95 transition-all"
+                                >
+                                  {copiedCode === code.code ? (
+                                    <Check className="h-3 w-3" />
+                                  ) : (
+                                    <Copy className="h-3 w-3" />
+                                  )}
+                                  <span>Copy</span>
+                                </button>
+                              </div>
+
+                              <div className="flex items-center text-xs">
+                                <span className="text-gray-500">
+                                  Folds: <strong className="text-gray-900 font-extrabold">{folds}</strong>
+                                </span>
+                                <span className="text-gray-500 ml-3">
+                                  Odds:{" "}
+                                  <strong className="text-gray-900 font-mono font-black">
+                                    {totalOdds}
+                                  </strong>
+                                </span>
+                              </div>
                             </div>
 
-                            <div className="flex items-center text-xs">
-                              <span className="text-gray-500">
-                                Folds: <strong className="text-gray-900 font-extrabold">{code.folds}</strong>
-                              </span>
-                              <span className="text-gray-500 ml-3">
-                                Odds:{" "}
-                                <strong className="text-gray-900 font-mono font-black">
-                                  {code.oddsDisplay}
-                                </strong>
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Optional Promo Banner (e.g. 1UP or 2UP rewards early) */}
-                          {code.promoBadge && (
-                            <div className="bg-[#f0fdf4] border-b border-[#dcfce7] px-3.5 py-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-[#15803d]">
-                              <ShieldCheck className="h-3.5 w-3.5 text-[#00a859] shrink-0" />
-                              <span>{code.promoBadge}</span>
-                            </div>
-                          )}
-
-                          {/* Selections / Matches preview */}
-                          <div className="divide-y divide-gray-100 bg-white">
-                            {displayedMatches.map((m) => (
-                              <div
-                                key={m.id}
-                                className="px-3.5 py-2.5 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                  <div
-                                    className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-black text-white shrink-0 shadow-2xs"
-                                    style={{ backgroundColor: m.leagueColor }}
-                                  >
-                                    {m.leagueShort}
-                                  </div>
-
-                                  <div className="min-w-0">
+                            {/* Selections / Matches preview */}
+                            <div className="divide-y divide-gray-100 bg-white">
+                              {displayedMatches.map((m) => (
+                                <div
+                                  key={m.matchId + m.optionId}
+                                  className="px-3.5 py-2.5 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
+                                >
+                                  <div className="min-w-0 pr-2">
                                     <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900 truncate">
                                       <span className="font-extrabold text-gray-900">
-                                        {m.pickLabel} @{m.pickMultiplier.toFixed(2)}
+                                        {m.optionLabel} @{m.multiplier.toFixed(2)}
                                       </span>
                                       <span className="text-gray-400 font-normal">|</span>
                                       <span className="text-gray-500 font-semibold">{m.marketName}</span>
                                     </div>
                                     <div className="text-[11px] text-gray-500 truncate">
-                                      {m.homeTeam} vs {m.awayTeam}
+                                      Match ID: {m.matchId}
                                     </div>
                                   </div>
                                 </div>
+                              ))}
+                            </div>
 
-                                <div className="text-right shrink-0">
-                                  <BarChart2 className="h-3.5 w-3.5 text-gray-400 ml-auto" />
-                                  <div className="text-[10px] text-gray-400 mt-0.5">{m.kickoffTime}</div>
-                                </div>
-                              </div>
-                            ))}
+                            {/* Card Footer Actions: Share | Add to Betslip */}
+                            <div className="border-t border-gray-100 flex items-center justify-between bg-white">
+                              <button
+                                type="button"
+                                onClick={() => handleShareCode(code)}
+                                className="flex items-center gap-1.5 text-xs font-extrabold text-[#00a859] px-4 py-2.5 hover:bg-[#f0fdf4] transition-colors"
+                              >
+                                <Share2 className="h-3.5 w-3.5" />
+                                <span>Share</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleAddToBetslip(code)}
+                                className="bg-[#00a859] hover:bg-[#00914c] active:scale-95 text-white font-black text-xs px-6 py-2.5 transition-all shadow-xs"
+                              >
+                                Add to Betslip
+                              </button>
+                            </div>
                           </div>
-
-                          {/* Card Footer Actions: Share | Add to Betslip */}
-                          <div className="border-t border-gray-100 flex items-center justify-between bg-white">
-                            <button
-                              type="button"
-                              onClick={() => handleShareCode(code)}
-                              className="flex items-center gap-1.5 text-xs font-extrabold text-[#00a859] px-4 py-2.5 hover:bg-[#f0fdf4] transition-colors"
-                            >
-                              <Share2 className="h-3.5 w-3.5" />
-                              <span>Share</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleAddToBetslip(code)}
-                              className="bg-[#00a859] hover:bg-[#00914c] active:scale-95 text-white font-black text-xs px-6 py-2.5 transition-all shadow-xs"
-                            >
-                              Add to Betslip
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </div>

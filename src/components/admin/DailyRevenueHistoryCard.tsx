@@ -29,7 +29,7 @@ interface DayItem {
 }
 
 export function DailyRevenueHistoryCard() {
-  const { getRevenueForDate, simulateDeposit, resetAllStatsToZero } = useBetrix();
+  const { getRevenueForDate } = useBetrix();
 
   // Offset in days for pagination (0 = week ending today)
   const [dayOffset, setDayOffset] = useState<number>(0);
@@ -77,11 +77,6 @@ export function DailyRevenueHistoryCard() {
 
   const handleNext = () => {
     setDayOffset((prev) => Math.max(0, prev - 5));
-  };
-
-  const handleSimulate = (dateStr: string, amount: number) => {
-    simulateDeposit(amount, dateStr);
-    toast.success(`+${formatGHC(amount)} deposit simulated for ${dateStr}!`);
   };
 
   const activeStats = inspectedDay ? getRevenueForDate(inspectedDay) : null;
