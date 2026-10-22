@@ -32,6 +32,7 @@ import { Route as ApiAuthMigrateRouteImport } from './routes/api/auth/migrate'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiBetsPlaceRouteImport } from './routes/api/bets/place'
 import { Route as ApiBetsSettleRouteImport } from './routes/api/bets/settle'
+import { Route as ApiPartnersApplyRouteImport } from './routes/api/partners/apply'
 import { Route as ApiSeevplusCheckoutRouteImport } from './routes/api/seevplus/checkout'
 import { Route as ApiSeevplusPayoutRouteImport } from './routes/api/seevplus/payout'
 import { Route as ApiSeevplusRefreshRouteImport } from './routes/api/seevplus/refresh'
@@ -153,6 +154,11 @@ const ApiBetsSettleRoute = ApiBetsSettleRouteImport.update({
   path: '/api/bets/settle',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPartnersApplyRoute = ApiPartnersApplyRouteImport.update({
+  id: '/api/partners/apply',
+  path: '/api/partners/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSeevplusCheckoutRoute = ApiSeevplusCheckoutRouteImport.update({
   id: '/api/seevplus/checkout',
   path: '/api/seevplus/checkout',
@@ -203,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/partners/apply': typeof ApiPartnersApplyRoute
   '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
   '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
   '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
@@ -233,6 +240,7 @@ export interface FileRoutesByTo {
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/partners/apply': typeof ApiPartnersApplyRoute
   '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
   '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
   '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
@@ -264,6 +272,7 @@ export interface FileRoutesById {
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
+  '/api/partners/apply': typeof ApiPartnersApplyRoute
   '/api/seevplus/checkout': typeof ApiSeevplusCheckoutRoute
   '/api/seevplus/payout': typeof ApiSeevplusPayoutRoute
   '/api/seevplus/refresh': typeof ApiSeevplusRefreshRoute
@@ -296,6 +305,7 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/bets/place'
     | '/api/bets/settle'
+    | '/api/partners/apply'
     | '/api/seevplus/checkout'
     | '/api/seevplus/payout'
     | '/api/seevplus/refresh'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/bets/place'
     | '/api/bets/settle'
+    | '/api/partners/apply'
     | '/api/seevplus/checkout'
     | '/api/seevplus/payout'
     | '/api/seevplus/refresh'
@@ -356,6 +367,7 @@ export interface FileRouteTypes {
     | '/api/auth/register'
     | '/api/bets/place'
     | '/api/bets/settle'
+    | '/api/partners/apply'
     | '/api/seevplus/checkout'
     | '/api/seevplus/payout'
     | '/api/seevplus/refresh'
@@ -387,6 +399,7 @@ export interface RootRouteChildren {
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
   ApiBetsPlaceRoute: typeof ApiBetsPlaceRoute
   ApiBetsSettleRoute: typeof ApiBetsSettleRoute
+  ApiPartnersApplyRoute: typeof ApiPartnersApplyRoute
   ApiSeevplusCheckoutRoute: typeof ApiSeevplusCheckoutRoute
   ApiSeevplusPayoutRoute: typeof ApiSeevplusPayoutRoute
   ApiSeevplusRefreshRoute: typeof ApiSeevplusRefreshRoute
@@ -557,6 +570,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBetsSettleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/partners/apply': {
+      id: '/api/partners/apply'
+      path: '/api/partners/apply'
+      fullPath: '/api/partners/apply'
+      preLoaderRoute: typeof ApiPartnersApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/seevplus/checkout': {
       id: '/api/seevplus/checkout'
       path: '/api/seevplus/checkout'
@@ -619,6 +639,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
   ApiBetsPlaceRoute: ApiBetsPlaceRoute,
   ApiBetsSettleRoute: ApiBetsSettleRoute,
+  ApiPartnersApplyRoute: ApiPartnersApplyRoute,
   ApiSeevplusCheckoutRoute: ApiSeevplusCheckoutRoute,
   ApiSeevplusPayoutRoute: ApiSeevplusPayoutRoute,
   ApiSeevplusRefreshRoute: ApiSeevplusRefreshRoute,

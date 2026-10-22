@@ -1,5 +1,3 @@
--- SUPERSEDED by 20261022_secure_betrix.sql. Do NOT re-run this file after that one:
--- its GRANT ALL + "USING (true)" policies would reopen every table to the public.
 
 -- BETRIX Production Database Migration
 -- Tables: profiles, transactions, slips, partners, partner_deposits, admin_leagues, admin_matches
@@ -104,42 +102,7 @@ CREATE TABLE IF NOT EXISTS public.admin_matches (
   created_at timestamptz DEFAULT now()
 );
 
--- Grant privileges to anon and authenticated API roles
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
-
--- Enable Row Level Security (RLS) with open public access policies
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.slips ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.partners ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.partner_deposits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_leagues ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.admin_matches ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow public read-write for profiles" ON public.profiles;
-CREATE POLICY "Allow public read-write for profiles" ON public.profiles FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for transactions" ON public.transactions;
-CREATE POLICY "Allow public read-write for transactions" ON public.transactions FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for slips" ON public.slips;
-CREATE POLICY "Allow public read-write for slips" ON public.slips FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for partners" ON public.partners;
-CREATE POLICY "Allow public read-write for partners" ON public.partners FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for partner_deposits" ON public.partner_deposits;
-CREATE POLICY "Allow public read-write for partner_deposits" ON public.partner_deposits FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for admin_leagues" ON public.admin_leagues;
-CREATE POLICY "Allow public read-write for admin_leagues" ON public.admin_leagues FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow public read-write for admin_matches" ON public.admin_matches;
-CREATE POLICY "Allow public read-write for admin_matches" ON public.admin_matches FOR ALL TO anon, authenticated, service_role USING (true) WITH CHECK (true);
+-- The original "GRANT ALL to anon/authenticated" + "USING (true)" policies that
+-- used to be here have been REMOVED: they made every table publicly readable and
+-- writable. Access is defined by 20261022_secure_betrix.sql and later files.
+-- Re-running this file is now harmless (it only creates missing tables).

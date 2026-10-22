@@ -29,7 +29,19 @@ export interface PartnerRecord {
   appliedAt?: string | undefined;
   notes?: string | undefined;
   earnings?: number | undefined;
+  /** Commission already paid out to the partner (GHS). */
+  paidOut?: number | undefined;
   createdAt?: string | undefined;
+}
+
+export interface PartnerPayoutRecord {
+  id: number;
+  partnerId: string;
+  amount: number;
+  commissionRate: number;
+  totalDepositsAt: number;
+  note?: string | undefined;
+  createdAt: string;
 }
 
 export interface PartnerDepositRecord {

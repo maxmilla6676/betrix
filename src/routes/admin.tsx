@@ -34,6 +34,7 @@ import {
   Trophy,
   ShieldAlert,
   LogIn,
+  Trash2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -45,7 +46,13 @@ import { auditLog, growthSeries } from "@/data/admin";
 import { teamById, leagueById } from "@/data/football";
 import { useBetrix, formatGHS } from "@/store/betrix";
 import { FREE_SPORTS_SOURCES } from "@/services/sportsApi";
-import { fetchAllProfilesFromBackend, updateUserRoleInBackend } from "@/services/backendSync";
+import {
+  deleteUserInBackend,
+  fetchAllProfilesFromBackend,
+  updateUserRoleInBackend,
+} from "@/services/backendSync";
+import { PartnerStatCard } from "@/components/admin/PartnerStatCard";
+import { partnerEarnings } from "@/lib/partners";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -80,8 +87,6 @@ type AdminNavTab =
 
 function AdminPage() {
   const [q, setQ] = useState("");
-  const [editingPartnerId, setEditingPartnerId] = useState<string | null>(null);
-  const [editRateInput, setEditRateInput] = useState<number>(15);
   const [copiedPartnerRegLink, setCopiedPartnerRegLink] = useState(false);
   const [copiedUserLinkCode, setCopiedUserLinkCode] = useState<string | null>(null);
   const [pendingRates, setPendingRates] = useState<Record<string, number>>({});
@@ -92,6 +97,7 @@ function AdminPage() {
   const [isRefreshingRole, setIsRefreshingRole] = useState(false);
   const [supabaseProfiles, setSupabaseProfiles] = useState<any[]>([]);
   const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   const {
     isLoggedIn,
@@ -110,6 +116,9 @@ function AdminPage() {
     history,
 
     partnersList,
+    partnerPayouts,
+    markPartnerPaid,
+    deletePartner,
     updatePartnerCommission,
     approvePartner,
     rejectPartner,
@@ -258,7 +267,49 @@ function AdminPage() {
 
 
   const pendingPartners = partnersList.filter((p) => p.status === "PENDING");
-  const approvedPartners = partnersList.filter((p) => p.status !== "PENDING");
+  const activePartners = partnersList.filter((p) => p.status === "APPROVED");
+  const rejectedPartners = partnersList.filter((p) => p.status === "REJECTED");
+
+  const handleDeletePartner = async (partnerId: string, partnerName: string) => {
+    if (!confirm(`Delete the partner application from ${partnerName}? This can't be undone.`)) return;
+    if (await deletePartner(partnerId)) toast.success(`${partnerName} deleted.`);
+  };
+
+  const handleDeleteUser = async (u: { id: string; phone: string; role: string; balance: number }) => {
+    if (u.role === "ADMIN") {
+      toast.error("This user is an admin. Demote them to user first.");
+      return;
+    }
+    if (u.balance > 0) {
+      toast.error(`This user still has ${formatGHC(u.balance)}. It must be withdrawn before the account can be deleted.`);
+      return;
+    }
+    if (
+      !confirm(
+        `Permanently delete ${u.phone}?
+
+They will no longer be able to log in. Their bet and transaction history is kept for your records. This can't be undone.`,
+      )
+    )
+      return;
+    setDeletingUserId(u.id);
+    const res = await deleteUserInBackend(u.id);
+    setDeletingUserId(null);
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`User ${u.phone} deleted.`);
+    setSupabaseProfiles((prev) => prev.filter((p) => p.id !== u.id));
+    await refreshProfile();
+  };
+  const partnerTotals = activePartners.reduce(
+    (acc, p) => {
+      const e = partnerEarnings(p);
+      return { deposits: acc.deposits + e.totalDeposits, earned: acc.earned + e.earned, unpaid: acc.unpaid + e.unpaid };
+    },
+    { deposits: 0, earned: 0, unpaid: 0 },
+  );
 
   const partnerRegUrl =
     typeof window !== "undefined"
@@ -319,12 +370,6 @@ function AdminPage() {
   const filteredUsers = supabaseProfiles.filter((u) =>
     `${u.phone} ${u.userId} ${u.role}`.toLowerCase().includes(q.trim().toLowerCase())
   );
-
-  const handleSaveCommission = (partnerId: string, partnerName: string) => {
-    updatePartnerCommission(partnerId, editRateInput);
-    toast.success(`Updated ${partnerName}'s commission percentage to ${editRateInput}%`);
-    setEditingPartnerId(null);
-  };
 
   return (
     <div className="min-h-screen bg-[#0e0e11] text-white font-sans selection:bg-[#F5C400] selection:text-black select-none pb-24">
@@ -681,6 +726,11 @@ function AdminPage() {
                               className="h-7 text-xs text-[#E41B23] border-[#E41B23]/30 hover:bg-[#E41B23]/10">
                               <XCircle className="h-3 w-3 mr-1" /> Reject
                             </Button>
+                            <button type="button" onClick={() => handleDeletePartner(partner.id, partner.name)}
+                              aria-label={`Delete application from ${partner.name}`} title="Delete application"
+                              className="h-7 w-7 grid place-items-center rounded-md border border-[#2a2a35] text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23]">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -690,58 +740,63 @@ function AdminPage() {
               )}
 
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wide">
-                  Active Partners ({approvedPartners.length})
-                </h4>
-                <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35] overflow-hidden">
-                  {approvedPartners.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-gray-500 bg-[#1e1e26]">
-                      <Users2 className="h-8 w-8 mx-auto mb-2 opacity-30 text-gray-400" />
-                      <p className="font-semibold text-gray-400">No active affiliate partners</p>
-                      <p className="text-[11px] text-gray-500 mt-1">Share the Partner Registration Link above to onboard partners.</p>
-                    </div>
-                  ) : (
-                    approvedPartners.map((p) => (
-                      <div key={p.id} className="p-3.5 flex flex-wrap items-center justify-between gap-3 hover:bg-[#1e1e26] transition-colors">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-white">{p.name}</span>
-                            <span className="font-mono text-xs text-gray-400 bg-[#1e1e26] px-1.5 py-0.5 rounded border border-[#2a2a35]">
-                              {p.code}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            Commission Rate: <strong className="text-gray-300">{p.commissionRate}%</strong>
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {editingPartnerId === p.id ? (
-                            <div className="flex items-center gap-1.5">
-                              <Input type="number" min={1} max={100} value={editRateInput}
-                                onChange={(e) => setEditRateInput(Number(e.target.value))}
-                                className="w-16 h-7 text-xs bg-[#1e1e26] border-[#2a2a35] text-white" />
-                              <span className="text-xs font-bold text-gray-300">%</span>
-                              <Button size="sm" className="h-7 text-xs bg-emerald-600 text-white"
-                                onClick={() => handleSaveCommission(p.id, p.name)}>Save</Button>
-                            </div>
-                          ) : (
-                            <Button variant="outline" size="sm"
-                              className="h-7 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white"
-                              onClick={() => { setEditingPartnerId(p.id); setEditRateInput(p.commissionRate); }}>
-                              <Edit3 className="h-3 w-3 mr-1" /> Edit Rate
-                            </Button>
-                          )}
-                          <Button variant="outline" size="sm"
-                            className="h-7 text-xs text-gray-300 border-[#2a2a35] hover:bg-[#1e1e26] hover:text-white"
-                            onClick={() => handleCopyUserLink(p.code)}>
-                            <Share2 className="h-3 w-3 mr-1" /> Copy Link
-                          </Button>
-                        </div>
-                      </div>
-                    ))
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wide">
+                    Active Partners ({activePartners.length})
+                  </h4>
+                  {activePartners.length > 0 && (
+                    <p className="text-[11px] text-gray-400">
+                      Referred deposits <strong className="font-mono text-white">{formatGHC(partnerTotals.deposits)}</strong>
+                      {" • "}Earned <strong className="font-mono text-white">{formatGHC(partnerTotals.earned)}</strong>
+                      {" • "}Unpaid <strong className="font-mono text-emerald-400">{formatGHC(partnerTotals.unpaid)}</strong>
+                    </p>
                   )}
                 </div>
+                {activePartners.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-500 bg-[#1e1e26] rounded-xl border border-[#2a2a35]">
+                    <Users2 className="h-8 w-8 mx-auto mb-2 opacity-30 text-gray-400" />
+                    <p className="font-semibold text-gray-400">No active affiliate partners</p>
+                    <p className="text-[11px] text-gray-500 mt-1">Share the Partner Registration Link above to onboard partners.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {activePartners.map((p) => (
+                      <PartnerStatCard
+                        key={p.id}
+                        partner={p}
+                        payouts={partnerPayouts.filter((po) => po.partnerId === p.id)}
+                        onSaveRate={updatePartnerCommission}
+                        onMarkPaid={(id) => markPartnerPaid(id)}
+                        onDelete={deletePartner}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {rejectedPartners.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    Rejected Applications ({rejectedPartners.length})
+                  </h4>
+                  <div className="divide-y divide-[#1f1f26] rounded-xl border border-[#2a2a35]">
+                    {rejectedPartners.map((rp) => (
+                      <div key={rp.id} className="flex items-center justify-between gap-2 p-3 text-xs">
+                        <div className="min-w-0">
+                          <span className="font-bold text-gray-300">{rp.name}</span>
+                          <span className="ml-2 font-mono text-gray-500">{rp.code}</span>
+                          <span className="ml-2 text-gray-500">{rp.phone}</span>
+                        </div>
+                        <button type="button" onClick={() => handleDeletePartner(rp.id, rp.name)}
+                          aria-label={`Delete application from ${rp.name}`} title="Delete application"
+                          className="h-7 w-7 shrink-0 grid place-items-center rounded-md border border-[#2a2a35] text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23]">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -836,6 +891,18 @@ function AdminPage() {
                           >
                             {isUserAdmin ? "Demote to User" : "Promote to Admin"}
                           </Button>
+                          {u.phone !== profile.phone && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              disabled={deletingUserId === u.id}
+                              title={isUserAdmin ? "Demote to user before deleting" : "Delete user"}
+                              aria-label={`Delete user ${u.phone}`}
+                              className="h-7 w-7 grid place-items-center rounded-md border border-[#2a2a35] text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23] disabled:opacity-40"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

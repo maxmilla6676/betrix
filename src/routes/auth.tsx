@@ -34,7 +34,10 @@ function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [referralCode, setReferralCode] = useState(search?.ref || "");
+  // A code that arrived via a partner's link is fixed: the user can't clear or change it.
+  const linkedReferral = (search?.ref || "").trim().toUpperCase();
+  const [referralCode, setReferralCode] = useState(linkedReferral);
+  const effectiveReferral = linkedReferral || referralCode.trim();
 
   const handleSubmit = (mode: "signin" | "signup") => async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +60,7 @@ function AuthPage() {
     setLoading(mode);
     try {
       if (mode === "signup") {
-        await register(phone.trim(), password, referralCode.trim() || undefined);
+        await register(phone.trim(), password, effectiveReferral || undefined);
         toast.success("Account created successfully!");
       } else {
         await login(phone.trim(), password);
@@ -277,26 +280,38 @@ function AuthPage() {
                 <div className="space-y-1.5 pt-0.5">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-extrabold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                      <span>Partner Referral Code (Optional)</span>
+                      <span>{linkedReferral ? "Partner Referral Code" : "Partner Referral Code (Optional)"}</span>
                     </label>
-                    {referralCode.trim() && (
+                    {effectiveReferral && (
                       <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
                         ✓ Partner Code Applied
                       </span>
                     )}
                   </div>
-                  <div className="relative flex rounded-xl border border-[#2c2c3b] bg-[#1c1c24] overflow-hidden focus-within:border-[#F5C400] transition-all">
-                    <Input
-                      type="text"
-                      placeholder="e.g. BTX-AMA"
-                      value={referralCode}
-                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                      className="border-0 bg-transparent h-11 text-sm font-mono font-bold text-white placeholder-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-3 uppercase"
-                    />
-                  </div>
-                  {referralCode.trim() && (
+                  {linkedReferral ? (
+                    // Not an input: nothing to click, focus, clear or edit.
+                    <div
+                      aria-label={`Partner referral code ${linkedReferral} (applied from link, cannot be changed)`}
+                      className="pointer-events-none select-none flex h-11 items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-3"
+                    >
+                      <span className="font-mono text-sm font-bold text-white">{linkedReferral}</span>
+                      <Lock className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+                    </div>
+                  ) : (
+                    <div className="relative flex rounded-xl border border-[#2c2c3b] bg-[#1c1c24] overflow-hidden focus-within:border-[#F5C400] transition-all">
+                      <Input
+                        type="text"
+                        placeholder="e.g. BTX-AMA"
+                        aria-label="Partner referral code (optional)"
+                        value={referralCode}
+                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                        className="border-0 bg-transparent h-11 text-sm font-mono font-bold text-white placeholder-gray-500 focus-visible:ring-0 focus-visible:ring-offset-0 px-3 uppercase"
+                      />
+                    </div>
+                  )}
+                  {effectiveReferral && (
                     <p className="text-[11px] text-[#F5C400] font-medium">
-                      You are registering through an official BETRIX Partner referral link ({referralCode.trim().toUpperCase()}).
+                      You are registering through an official BETRIX Partner referral link ({effectiveReferral}).
                     </p>
                   )}
                 </div>

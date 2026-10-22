@@ -21,6 +21,7 @@ import {
   Wallet,
   Smartphone,
   Coins,
+  Handshake,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,20 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const navigate = useNavigate();
-  const { profile, balance, history, transactions, isLoggedIn, authReady, logout, withdraw } = useBetrix();
+  const {
+    profile,
+    balance,
+    history,
+    transactions,
+    isLoggedIn,
+    authReady,
+    isAdmin,
+    partnersList,
+    logout,
+    withdraw,
+  } = useBetrix();
+  // RLS only returns a partner row to its owner (matched by phone), or every row to admins.
+  const myPartner = partnersList.find((p) => p.phone === profile.phone);
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
@@ -375,27 +389,55 @@ function ProfilePage() {
             <ChevronRight className="h-5 w-5 text-gray-500" />
           </button>
 
-          {/* Admin Portal */}
-          <Link 
-            to="/admin"
-            className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-[#F5C400] flex items-center justify-center shrink-0">
-                <ShieldCheck className="h-5 w-5 text-black" />
+          {/* Partner Dashboard — only for partners (and admins) */}
+          {(myPartner || isAdmin) && (
+            <Link
+              to="/partners"
+              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-emerald-500 flex items-center justify-center shrink-0">
+                  <Handshake className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-white">Partner Dashboard</p>
+                  <p className="text-xs font-medium text-gray-400">Referral link, deposits & commission</p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-black text-white">Admin Console & Operations</p>
-                <p className="text-xs font-medium text-gray-400">Sports API, users, matches & metrics</p>
+              <div className="flex items-center gap-2">
+                {myPartner && (
+                  <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                    {myPartner.status === "APPROVED" ? "PARTNER" : myPartner.status}
+                  </span>
+                )}
+                <ChevronRight className="h-5 w-5 text-gray-500" />
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="bg-[#F5C400]/20 text-[#F5C400] text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                ADMIN
-              </span>
-              <ChevronRight className="h-5 w-5 text-gray-500" />
-            </div>
-          </Link>
+            </Link>
+          )}
+
+          {/* Admin Portal — admins only */}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#F5C400] flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-5 w-5 text-black" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-white">Admin Console & Operations</p>
+                  <p className="text-xs font-medium text-gray-400">Sports API, users, matches & metrics</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="bg-[#F5C400]/20 text-[#F5C400] text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  ADMIN
+                </span>
+                <ChevronRight className="h-5 w-5 text-gray-500" />
+              </div>
+            </Link>
+          )}
 
           {/* Help & Support */}
           <Link 

@@ -13,10 +13,9 @@ import { fetchLiveSportsFixtures, dynamicTeams } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
 import { toast } from "sonner";
 import { type AdminLeague, type AdminMatch, convertAdminMatchToMatch } from "@/data/adminMatches";
-import type { PartnerRecord, PartnerDepositRecord } from "@/data/admin";
+import type { PartnerRecord, PartnerDepositRecord, PartnerPayoutRecord } from "@/data/admin";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  applyPartner,
   deleteAdminLeague as deleteAdminLeagueRow,
   deleteAdminMatch as deleteAdminMatchRow,
   fetchAdminCatalog,
@@ -24,6 +23,8 @@ import {
   fetchOwnProfile,
   fetchPartnersData,
   fetchPlatformStats,
+  markPartnerPaid as markPartnerPaidRpc,
+  deletePartnerInBackend,
   saveAdminLeague,
   saveAdminMatch,
   updatePartnerInBackend,
@@ -110,11 +111,10 @@ export interface PartnerApplication {
   name: string;
   email: string;
   phone: string;
+  /** Password for the partner's login (new account, or the existing account's password). */
+  password: string;
   channel: string;
-  channelLink?: string | undefined;
   audienceSize?: string | undefined;
-  preferredCode?: string | undefined;
-  notes?: string | undefined;
 }
 
 interface BetrixState {
@@ -156,6 +156,11 @@ interface BetrixState {
   // Partners
   partnersList: PartnerRecord[];
   partnerDeposits: PartnerDepositRecord[];
+  partnerPayouts: PartnerPayoutRecord[];
+  /** Admin: pay out everything a partner is currently owed. Returns the amount paid. */
+  markPartnerPaid: (partnerId: string, note?: string) => Promise<number | null>;
+  /** Admin: delete a partner and their referral/payout records. */
+  deletePartner: (partnerId: string) => Promise<boolean>;
   registerPartner: (data: PartnerApplication) => Promise<{ code?: string; error?: string }>;
   approvePartner: (partnerId: string, commissionRate?: number) => Promise<void>;
   rejectPartner: (partnerId: string, reason?: string) => Promise<void>;
@@ -236,6 +241,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [partnersList, setPartnersList] = useState<PartnerRecord[]>([]);
   const [partnerDeposits, setPartnerDeposits] = useState<PartnerDepositRecord[]>([]);
+  const [partnerPayouts, setPartnerPayouts] = useState<PartnerPayoutRecord[]>([]);
   const [platformTransactions, setPlatformTransactions] = useState<TransactionRecord[]>([]);
   const [platformUserCount, setPlatformUserCount] = useState(0);
   const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>([]);
@@ -324,6 +330,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     const partners = await fetchPartnersData();
     setPartnersList(partners.partners);
     setPartnerDeposits(partners.partnerDeposits);
+    setPartnerPayouts(partners.partnerPayouts);
     if (role === "ADMIN") {
       const stats = await fetchPlatformStats();
       setPlatformTransactions(stats.transactions);
@@ -340,6 +347,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       setHistory([]);
       setPartnersList([]);
       setPartnerDeposits([]);
+      setPartnerPayouts([]);
       setPlatformTransactions([]);
       return;
     }
@@ -354,17 +362,29 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     if (prof) await loadPartnersAndStats(prof.role);
   }, [authId, loadAccount, loadPartnersAndStats]);
 
-  const login = useCallback(async (rawPhone: string, password: string) => {
-    const phone = normalizePhone(rawPhone);
-    // Upgrades pre-Supabase-Auth accounts on first login, and tells us the login email.
-    const { email } = await apiPost<{ email: string }>("/api/auth/migrate", { phone, password });
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error("Incorrect phone number or password.");
-    // Resolve only once the profile is loaded, so the next page sees a logged-in user.
-    const prof = await loadAccount(data.user.id);
-    if (!prof) throw new Error("Your account could not be loaded. Please try again.");
-    setAuthReady(true);
-  }, [loadAccount]);
+  const login = useCallback(
+    async (rawPhone: string, password: string) => {
+      const phone = normalizePhone(rawPhone);
+      // Upgrades pre-Supabase-Auth accounts on first login, and tells us the login email.
+      const { email, exists } = await apiPost<{ email: string; exists?: boolean }>(
+        "/api/auth/migrate",
+        {
+          phone,
+          password,
+        },
+      );
+      if (exists === false) {
+        throw new Error("No BETRIX account uses this number yet. Tap Register to create one.");
+      }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw new Error("Incorrect phone number or password.");
+      // Resolve only once the profile is loaded, so the next page sees a logged-in user.
+      const prof = await loadAccount(data.user.id);
+      if (!prof) throw new Error("Your account could not be loaded. Please try again.");
+      setAuthReady(true);
+    },
+    [loadAccount],
+  );
 
   const register = useCallback(
     async (rawPhone: string, password: string, referralCode?: string) => {
@@ -725,21 +745,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   );
 
   // ── Partners ──
-  const registerPartner = useCallback(
-    async (data: PartnerApplication) => {
-      const res = await applyPartner(data);
-      if (res.code) {
-        pushNotification(
-          notif(
-            "Partner application received",
-            `Your application (${res.code}) is pending admin approval.`,
-          ),
-        );
-      }
-      return res;
-    },
-    [pushNotification],
-  );
+  // Doesn't log anyone in: the applicant logs in with this number once approved.
+  const registerPartner = useCallback(async (data: PartnerApplication) => {
+    try {
+      const res = await apiPost<{ code: string }>("/api/partners/apply", data);
+      return { code: res.code };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Could not submit your application." };
+    }
+  }, []);
 
   const updatePartner = useCallback(
     async (id: string, patch: { status?: string; commission_rate?: number }, okMessage: string) => {
@@ -752,6 +766,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       const partners = await fetchPartnersData();
       setPartnersList(partners.partners);
       setPartnerDeposits(partners.partnerDeposits);
+      setPartnerPayouts(partners.partnerPayouts);
     },
     [],
   );
@@ -781,6 +796,32 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       ),
     [updatePartner],
   );
+
+  const deletePartner = useCallback(async (partnerId: string) => {
+    const res = await deletePartnerInBackend(partnerId);
+    if (!res.success) {
+      toast.error(res.error);
+      return false;
+    }
+    const partners = await fetchPartnersData();
+    setPartnersList(partners.partners);
+    setPartnerDeposits(partners.partnerDeposits);
+    setPartnerPayouts(partners.partnerPayouts);
+    return true;
+  }, []);
+
+  const markPartnerPaid = useCallback(async (partnerId: string, note?: string) => {
+    const res = await markPartnerPaidRpc(partnerId, note);
+    if (!res.success) {
+      toast.error(res.error);
+      return null;
+    }
+    const partners = await fetchPartnersData();
+    setPartnersList(partners.partners);
+    setPartnerDeposits(partners.partnerDeposits);
+    setPartnerPayouts(partners.partnerPayouts);
+    return res.paid ?? 0;
+  }, []);
 
   // ── Admin stats ──
   const todayISO = new Date().toISOString().slice(0, 10);
@@ -848,6 +889,9 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     approvePartner,
     rejectPartner,
     updatePartnerCommission,
+    partnerPayouts,
+    markPartnerPaid,
+    deletePartner,
     platformTransactions,
     totalRevenue,
     todayRevenue,

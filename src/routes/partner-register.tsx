@@ -47,11 +47,10 @@ export function PartnerRegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [channel, setChannel] = useState("Telegram VIP Channel");
-  const [channelLink, setChannelLink] = useState("");
   const [audienceSize, setAudienceSize] = useState("5,000 - 20,000 members");
-  const [preferredCode, setPreferredCode] = useState("");
-  const [notes, setNotes] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedPartner, setSubmittedPartner] = useState<{
@@ -60,13 +59,6 @@ export function PartnerRegisterPage() {
     code: string;
   } | null>(null);
 
-  // Clean code preview
-  const formattedCodePreview = preferredCode.trim()
-    ? preferredCode.toUpperCase().startsWith("BTX-")
-      ? preferredCode.toUpperCase()
-      : `BTX-${preferredCode.toUpperCase().replace(/[^A-Z0-9]/g, "")}`
-    : "BTX-YOURCODE";
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -74,12 +66,20 @@ export function PartnerRegisterPage() {
       toast.error("Please provide your full name or brand name");
       return;
     }
-    if (!phone.trim() || phone.length < 8) {
+    if (!email.trim() || !email.includes("@")) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!phone.trim() || phone.replace(/D/g, "").length < 9) {
       toast.error("Please enter a valid Ghanaian mobile phone number");
       return;
     }
-    if (!email.trim() || !email.includes("@")) {
-      toast.error("Please enter a valid email address");
+    if (password.length < 6) {
+      toast.error("Choose a password of at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match.");
       return;
     }
     if (!agreed) {
@@ -88,17 +88,7 @@ export function PartnerRegisterPage() {
     }
 
     setIsSubmitting(true);
-
-    const res = await registerPartner({
-      name,
-      email,
-      phone,
-      channel,
-      channelLink: channelLink.trim() || undefined,
-      audienceSize,
-      preferredCode: preferredCode.trim() || undefined,
-      notes: notes.trim() || undefined,
-    });
+    const res = await registerPartner({ name, email, phone, password, channel, audienceSize });
     setIsSubmitting(false);
     if (!res.code) {
       toast.error(res.error || "Could not submit your application.");
@@ -159,9 +149,9 @@ export function PartnerRegisterPage() {
                   Registration Received, {submittedPartner.name}!
                 </h1>
                 <p className="text-sm text-gray-300 max-w-lg mx-auto">
-                  Your BETRIX partner application has been registered successfully.
-                  An administrator must approve your application on the dashboard before
-                  your unique registration link and commission earnings become active.
+                  Your BETRIX partner application has been registered successfully. An administrator
+                  must approve your application on the dashboard before your unique registration
+                  link and commission earnings become active.
                 </p>
               </div>
 
@@ -181,7 +171,7 @@ export function PartnerRegisterPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-400 font-medium">Initial Commission Rate:</span>
-                  <span className="text-gray-200 font-bold">10% — 15% (Confirmed on Approval)</span>
+                  <span className="text-gray-200 font-bold">Set by BETRIX on approval</span>
                 </div>
               </div>
 
@@ -189,9 +179,12 @@ export function PartnerRegisterPage() {
               <div className="p-4 rounded-2xl bg-[#1b1928] border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed text-left flex items-start gap-3">
                 <ShieldCheck className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-extrabold text-white">Next Step: Administrator Dashboard Approval</p>
+                  <p className="font-extrabold text-white">Next step: approval</p>
                   <p className="text-gray-400 mt-1">
-                    Once approved by BETRIX Operations, you can sign in to the Partner Portal to view your real-time user deposit metrics, monitor earnings, and copy your unique link to send to your users.
+                    Once BETRIX approves you, log in with{" "}
+                    <strong className="text-white">{phone}</strong> and the password you just set,
+                    then open <strong className="text-white">Me → Partner Dashboard</strong> to copy
+                    your referral link and track deposits and earnings.
                   </p>
                 </div>
               </div>
@@ -202,8 +195,8 @@ export function PartnerRegisterPage() {
                   asChild
                   className="w-full sm:w-auto bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs h-11 rounded-xl px-6 uppercase tracking-wider"
                 >
-                  <Link to="/admin">
-                    <span>Admin Console (Approve Now)</span>
+                  <Link to="/partners">
+                    <span>Open Partner Dashboard</span>
                     <ArrowRight className="h-4 w-4 ml-1.5" />
                   </Link>
                 </Button>
@@ -213,8 +206,8 @@ export function PartnerRegisterPage() {
                   variant="outline"
                   className="w-full sm:w-auto border-[#2b2b3a] bg-[#1a1a24] text-gray-200 font-bold text-xs h-11 rounded-xl px-5 hover:bg-[#232330]"
                 >
-                  <Link to="/partners">
-                    <span>Preview Partner Portal</span>
+                  <Link to="/">
+                    <span>Back to BETRIX</span>
                   </Link>
                 </Button>
               </div>
@@ -239,7 +232,9 @@ export function PartnerRegisterPage() {
               </h1>
 
               <p className="text-sm text-gray-300 leading-relaxed">
-                Join Ghana's premier sportsbook affiliate network. Earn lifetime commission on every single deposit made by users who register through your unique partner registration link.
+                Join Ghana's premier sportsbook affiliate network. Earn lifetime commission on every
+                single deposit made by users who register through your unique partner registration
+                link.
               </p>
 
               {/* Benefit highlights */}
@@ -284,7 +279,8 @@ export function PartnerRegisterPage() {
                   <span>Partner Application Form</span>
                 </h2>
                 <p className="text-xs text-gray-400 mt-1">
-                  Provide your channel and contact information. Administrators review applications before activating referral links.
+                  Provide your channel and contact information. Administrators review applications
+                  before activating referral links.
                 </p>
               </div>
 
@@ -337,10 +333,41 @@ export function PartnerRegisterPage() {
                         required
                         placeholder="024 123 4567"
                         value={phone}
+                        aria-label="Ghana mobile number"
                         onChange={(e) => setPhone(e.target.value)}
                         className="border-0 bg-transparent h-11 text-sm font-bold text-white px-3 focus-visible:ring-0 focus-visible:ring-offset-0"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] text-gray-400">
+                    You&apos;ll log in with this phone number and password to open your Partner
+                    Dashboard once you&apos;re approved. If the number already has a BETRIX account,
+                    enter that account&apos;s password.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                      type="password"
+                      required
+                      autoComplete="new-password"
+                      placeholder="Password (min 6 characters)"
+                      aria-label="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
+                    />
+                    <Input
+                      type="password"
+                      required
+                      autoComplete="new-password"
+                      placeholder="Confirm password"
+                      aria-label="Confirm password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
+                    />
                   </div>
                 </div>
 
@@ -356,12 +383,22 @@ export function PartnerRegisterPage() {
                       onChange={(e) => setChannel(e.target.value)}
                       className="w-full bg-[#1b1b24] border border-[#2c2c3b] text-white text-xs font-bold h-11 rounded-xl px-3 focus:outline-none focus:border-[#F5C400]"
                     >
-                      <option value="Telegram VIP Channel">Telegram VIP / Predictions Channel</option>
+                      <option value="Telegram VIP Channel">
+                        Telegram VIP / Predictions Channel
+                      </option>
                       <option value="WhatsApp Community">WhatsApp Sports Betting Group</option>
-                      <option value="YouTube Sports Channel">YouTube Sports Analysis Channel</option>
-                      <option value="Twitter / X Football Account">Twitter / X Sports Media Account</option>
-                      <option value="TikTok Football Creator">TikTok Football / Betting Creator</option>
-                      <option value="Sports Bar / Retail Shop">Sports Bar / Retail Viewing Center</option>
+                      <option value="YouTube Sports Channel">
+                        YouTube Sports Analysis Channel
+                      </option>
+                      <option value="Twitter / X Football Account">
+                        Twitter / X Sports Media Account
+                      </option>
+                      <option value="TikTok Football Creator">
+                        TikTok Football / Betting Creator
+                      </option>
+                      <option value="Sports Bar / Retail Shop">
+                        Sports Bar / Retail Viewing Center
+                      </option>
                       <option value="Website or Sports Blog">Sports Blog / Website</option>
                       <option value="Other Influencer Network">Other Word-of-Mouth Network</option>
                     </select>
@@ -385,56 +422,6 @@ export function PartnerRegisterPage() {
                   </div>
                 </div>
 
-                {/* Channel Link / Handle */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider">
-                    Channel Link, Handle or URL (Optional)
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. https://t.me/ghana_vip_bets or @AccraFootball"
-                    value={channelLink}
-                    onChange={(e) => setChannelLink(e.target.value)}
-                    className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
-                  />
-                </div>
-
-                {/* Preferred Referral Code */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider">
-                      Preferred Referral Code (Optional)
-                    </label>
-                    <span className="text-[11px] font-mono font-bold text-[#F5C400]">
-                      Preview: {formattedCodePreview}
-                    </span>
-                  </div>
-                  <Input
-                    type="text"
-                    placeholder="e.g. VIP, ACCRA, GHANA (Will be prefixed with BTX-)"
-                    value={preferredCode}
-                    onChange={(e) => setPreferredCode(e.target.value)}
-                    className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl font-mono uppercase focus:border-[#F5C400]"
-                  />
-                  <p className="text-[11px] text-gray-400">
-                    Your unique user registration link will be generated with this code once approved.
-                  </p>
-                </div>
-
-                {/* Additional Strategy / Notes */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider">
-                    Additional Information / Promotion Strategy (Optional)
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Tell us how you plan to introduce BETRIX to your audience..."
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full bg-[#1b1b24] border border-[#2c2c3b] text-white text-xs rounded-xl p-3 focus:outline-none focus:border-[#F5C400] resize-none"
-                  />
-                </div>
-
                 {/* Terms agreement checkbox */}
                 <div className="flex items-start gap-2 pt-2 text-xs text-gray-300">
                   <input
@@ -444,9 +431,15 @@ export function PartnerRegisterPage() {
                     onChange={(e) => setAgreed(e.target.checked)}
                     className="mt-0.5 accent-[#F5C400] h-4 w-4 rounded"
                   />
-                  <label htmlFor="partnerTerms" className="cursor-pointer select-none leading-relaxed">
-                    I confirm that I am at least 18 years old, and understand that my partner application must be{" "}
-                    <span className="text-[#F5C400] font-bold">approved by an administrator on the dashboard</span>{" "}
+                  <label
+                    htmlFor="partnerTerms"
+                    className="cursor-pointer select-none leading-relaxed"
+                  >
+                    I confirm that I am at least 18 years old, and understand that my partner
+                    application must be{" "}
+                    <span className="text-[#F5C400] font-bold">
+                      approved by an administrator on the dashboard
+                    </span>{" "}
                     before my partner portal access and unique referral links are enabled.
                   </label>
                 </div>
@@ -471,7 +464,10 @@ export function PartnerRegisterPage() {
               {/* Notice footer */}
               <div className="bg-[#121217] p-3 rounded-xl border border-[#22222e] text-[11px] text-gray-400 flex items-center gap-2 justify-center">
                 <Clock className="h-4 w-4 text-amber-400 shrink-0" />
-                <span>Applications are usually reviewed within 1 to 24 hours by the BETRIX operations team.</span>
+                <span>
+                  Applications are usually reviewed within 1 to 24 hours by the BETRIX operations
+                  team.
+                </span>
               </div>
             </div>
           </div>

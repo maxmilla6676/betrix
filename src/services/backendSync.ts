@@ -6,7 +6,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { TransactionRecord, HistoryEntry } from "@/store/betrix";
-import type { PartnerRecord, PartnerDepositRecord } from "@/data/admin";
+import type { PartnerRecord, PartnerDepositRecord, PartnerPayoutRecord } from "@/data/admin";
 import {
   adminLeagueFromRow,
   adminMatchFromRow,
@@ -52,6 +52,7 @@ const partnerFromRow = (p: any): PartnerRecord => ({
   tier: "Bronze",
   totalDeposits: Number(p.total_deposits ?? 0),
   earnings: Number(p.earnings ?? 0),
+  paidOut: Number(p.paid_out ?? 0),
   createdAt: p.created_at,
 });
 
@@ -139,20 +140,55 @@ export async function fetchAdminCatalog(): Promise<{
   };
 }
 
+const partnerPayoutFromRow = (r: any): PartnerPayoutRecord => ({
+  id: r.id,
+  partnerId: r.partner_id,
+  amount: Number(r.amount),
+  commissionRate: Number(r.commission_rate),
+  totalDepositsAt: Number(r.total_deposits_at),
+  note: r.note ?? undefined,
+  createdAt: r.created_at,
+});
+
 /** Partners visible to the caller: their own record, or all of them for admins. */
 export async function fetchPartnersData() {
-  const [partnersRes, depositsRes] = await Promise.all([
+  const [partnersRes, depositsRes, payoutsRes] = await Promise.all([
     supabase.from("partners").select("*").order("created_at", { ascending: false }),
     supabase
       .from("partner_deposits")
       .select("*")
       .order("created_at", { ascending: false })
-      .limit(200),
+      .limit(500),
+    supabase
+      .from("partner_payouts")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
   return {
     partners: (partnersRes.data || []).map(partnerFromRow),
     partnerDeposits: (depositsRes.data || []).map(partnerDepositFromRow),
+    partnerPayouts: (payoutsRes.data || []).map(partnerPayoutFromRow),
   };
+}
+
+/** Admin: record a payout of everything currently owed to the partner. */
+export async function markPartnerPaid(partnerId: string, note?: string) {
+  const { data, error } = await supabase.rpc("admin_mark_partner_paid", {
+    p_partner_id: partnerId,
+    p_note: note || null,
+  });
+  if (error) {
+    return {
+      success: false,
+      error: error.message.includes("NOTHING_TO_PAY")
+        ? "Nothing to pay — this partner has no unpaid commission."
+        : error.message.includes("FORBIDDEN")
+          ? "Admin access required."
+          : error.message,
+    };
+  }
+  return { success: true, paid: Number((data as any)?.paid ?? 0) };
 }
 
 /** Admin only: recent transactions across all users, and the member count. */
@@ -206,32 +242,6 @@ export async function fetchSlipByCode(code: string): Promise<HistoryEntry | null
   return { ...slipFromRow(row), stake: 0, payout: 0, potWin: 0 };
 }
 
-export async function applyPartner(p: {
-  name: string;
-  email: string;
-  phone: string;
-  channel: string;
-  audienceSize?: string | undefined;
-  preferredCode?: string | undefined;
-}): Promise<{ code?: string; error?: string }> {
-  const { data, error } = await supabase.rpc("apply_partner", {
-    p_name: p.name,
-    p_email: p.email,
-    p_phone: p.phone,
-    p_channel: p.channel,
-    p_audience_size: p.audienceSize || "",
-    p_code: p.preferredCode || "",
-  });
-  if (error) {
-    return {
-      error: error.message.includes("CODE_TAKEN")
-        ? "That referral code is already taken. Choose another."
-        : "Could not submit your application. Check the details and try again.",
-    };
-  }
-  return { code: String(data) };
-}
-
 export async function updatePartnerInBackend(
   id: string,
   patch: { status?: string; commission_rate?: number },
@@ -278,4 +288,33 @@ export async function saveAdminMatch(match: AdminMatch) {
 export async function deleteAdminMatch(id: string) {
   const { error } = await supabase.from("admin_matches").delete().eq("id", id);
   return error ? { success: false, error: error.message } : { success: true };
+}
+
+const DELETE_ERRORS: Record<string, string> = {
+  FORBIDDEN: "Admin access required.",
+  CANNOT_DELETE_SELF: "You can't delete your own account.",
+  DEMOTE_ADMIN_FIRST: "This user is an admin. Demote them to user first.",
+  HAS_BALANCE:
+    "This user still has a balance. It must be withdrawn before the account can be deleted.",
+  HAS_PENDING_BETS: "This user has bets that haven't settled yet. Try again after they settle.",
+  HAS_OPEN_WITHDRAWAL: "This user has a withdrawal in progress. Try again once it completes.",
+  UNKNOWN_USER: "User not found — they may already be deleted.",
+  UNKNOWN_PARTNER: "Partner not found — they may already be deleted.",
+};
+
+function deleteError(message: string) {
+  const code = Object.keys(DELETE_ERRORS).find((k) => message.includes(k));
+  return code ? DELETE_ERRORS[code]! : message;
+}
+
+/** Admin: permanently delete a user (refused while they have money or bets open). */
+export async function deleteUserInBackend(profileId: string) {
+  const { error } = await supabase.rpc("admin_delete_user", { p_profile_id: profileId });
+  return error ? { success: false, error: deleteError(error.message) } : { success: true };
+}
+
+/** Admin: delete a partner, their referral tracking and payout history. */
+export async function deletePartnerInBackend(partnerId: string) {
+  const { error } = await supabase.rpc("admin_delete_partner", { p_partner_id: partnerId });
+  return error ? { success: false, error: deleteError(error.message) } : { success: true };
 }

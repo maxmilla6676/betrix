@@ -104,7 +104,9 @@ export async function migrateLegacyAccount(body: Record<string, unknown>) {
     .maybeSingle();
 
   // Unknown numbers and already-migrated accounts both just sign in normally.
-  if (!profile || profile.auth_id) return { email };
+  // `exists: false` lets the login screen say "no account" instead of "wrong password".
+  if (!profile) return { email, exists: false };
+  if (profile.auth_id) return { email, exists: true };
 
   if (!profile.password_hash) {
     throw new HttpError(403, "This account needs to be reactivated. Please contact support.");
@@ -126,5 +128,5 @@ export async function migrateLegacyAccount(body: Record<string, unknown>) {
     await db.auth.admin.deleteUser(authId);
     throw new HttpError(500, "Could not upgrade your account. Please try again.");
   }
-  return { email };
+  return { email, exists: true };
 }
