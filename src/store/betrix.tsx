@@ -12,7 +12,12 @@ import { matchById, teamById, isMatchLocked, type Match } from "@/data/football"
 import { fetchLiveSportsFixtures, dynamicTeams } from "@/services/sportsApi";
 import { formatClockGhana, espnDateParam } from "@/lib/ghana-time";
 import { toast } from "sonner";
-import { type AdminLeague, type AdminMatch, convertAdminMatchToMatch } from "@/data/adminMatches";
+import {
+  type AdminLeague,
+  type AdminMatch,
+  convertAdminMatchToMatch,
+  computeAdminMatchLiveState,
+} from "@/data/adminMatches";
 import type { PartnerRecord, PartnerDepositRecord, PartnerPayoutRecord } from "@/data/admin";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -459,10 +464,11 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     [adminMatches, runAdminWrite],
   );
 
-  // ── Live sports feed ──
+  // ── Live sports feed & match simulation ──
   const [tick, setTick] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setTick((t) => (t + 1) % 1000000), 15000);
+    // 3s interval keeps in-play minutes and progressive goals updating smoothly
+    const timer = setInterval(() => setTick((t) => (t + 1) % 1000000), 3000);
     return () => clearInterval(timer);
   }, []);
 
@@ -498,7 +504,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   }, [fetchApiMatches]);
 
   const allMatches = useMemo(() => {
-    const convertedAdmin = adminMatches.map((am) => convertAdminMatchToMatch(am, adminLeagues));
+    const now = Date.now();
+    const convertedAdmin = adminMatches.map((am) => convertAdminMatchToMatch(am, adminLeagues, now));
     const adminIds = new Set(convertedAdmin.map((m) => m.id));
     const combined = [...convertedAdmin, ...apiMatches.filter((m) => !adminIds.has(m.id))];
     const seenIds = new Set<string>();
@@ -678,23 +685,44 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     [pushNotification, refreshProfile],
   );
 
+  // Auto-finish and auto-settle admin matches once they reach the end of their match duration
+  useEffect(() => {
+    const now = Date.now();
+    for (const am of adminMatches) {
+      if (am.status === "finished" || am.status === "cancelled") continue;
+      const state = computeAdminMatchLiveState(am, now);
+      if (state.isCompleted && state.status === "FINISHED") {
+        updateAdminMatch({
+          id: am.id,
+          status: "finished",
+          homeScore: state.homeScore,
+          awayScore: state.awayScore,
+        }).then(() => {
+          settleNow("all").catch(() => undefined);
+        });
+      }
+    }
+  }, [tick, adminMatches, updateAdminMatch, settleNow]);
+
   useEffect(() => {
     if (!isLoggedIn) return;
     const check = () => {
-      // Only ask the server when some pending slip has a match that should be over.
+      // Check when some pending slip has a match that finished or passed its scheduled duration
       const due = historyRef.current.some(
         (h) =>
           h.status === "PENDING" &&
-          h.selections.some(
-            (s) => s.kickoffTime && Date.now() - new Date(s.kickoffTime).getTime() > 100 * 60000,
-          ),
+          h.selections.some((s) => {
+            const m = allMatches.find((match) => match.id === s.matchId);
+            if (m && m.status === "FINISHED") return true;
+            return s.kickoffTime && Date.now() - new Date(s.kickoffTime).getTime() > 2 * 60000;
+          }),
       );
       if (due) settleNow().catch(() => undefined);
     };
     check();
-    const interval = setInterval(check, 60000);
+    const interval = setInterval(check, 10000);
     return () => clearInterval(interval);
-  }, [isLoggedIn, settleNow]);
+  }, [isLoggedIn, settleNow, allMatches]);
 
   const markAllRead = useCallback(
     () => setNotifications((n) => n.map((x) => ({ ...x, read: true }))),

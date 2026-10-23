@@ -10,6 +10,7 @@ import type { PartnerRecord, PartnerDepositRecord, PartnerPayoutRecord } from "@
 import {
   adminLeagueFromRow,
   adminMatchFromRow,
+  parseAdminMatchOutcome,
   type AdminLeague,
   type AdminMatch,
 } from "@/data/adminMatches";
@@ -268,6 +269,9 @@ export async function deleteAdminLeague(id: string) {
 }
 
 export async function saveAdminMatch(match: AdminMatch) {
+  const { targetHome, targetAway, outcome, durationMinutes } = parseAdminMatchOutcome(match);
+  const outcomeScore = `${targetHome}-${targetAway}:${durationMinutes}`;
+
   const { error } = await supabase.from("admin_matches").upsert({
     id: match.id,
     league_id: match.leagueId,
@@ -278,8 +282,10 @@ export async function saveAdminMatch(match: AdminMatch) {
     kickoff_date: match.kickoffDate,
     kickoff_time: match.kickoffTime,
     status: match.status,
-    home_score: match.homeScore ?? null,
-    away_score: match.awayScore ?? null,
+    outcome,
+    outcome_score: outcomeScore,
+    home_score: match.homeScore ?? (match.status === "finished" ? targetHome : null),
+    away_score: match.awayScore ?? (match.status === "finished" ? targetAway : null),
     created_at: match.createdAt,
   });
   return error ? { success: false, error: error.message } : { success: true };

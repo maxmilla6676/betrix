@@ -2,12 +2,18 @@ import type { Match, MatchStatus, Market, Team, League } from "@/data/football";
 import { stringHash } from "@/lib/espn";
 import { dynamicTeams, dynamicLeagues, dynamicMatchesMap } from "@/services/sportsApi";
 
+export type AdminMatchOutcome = "home" | "draw" | "away";
+
 export interface AdminLeague {
   id: string;
   name: string;
   country: string;
   color: string;
   logoUrl?: string | undefined;
+  defaultOutcome?: AdminMatchOutcome | undefined;
+  defaultOutcomeScore?: string | undefined;
+  defaultHomeScore?: number | undefined;
+  defaultAwayScore?: number | undefined;
   createdAt: string;
 }
 
@@ -21,10 +27,241 @@ export interface AdminMatch {
   kickoffDate: string; // "YYYY-MM-DD" (Ghana time = UTC)
   kickoffTime: string; // "HH:mm"
   status: "scheduled" | "live" | "finished" | "cancelled";
-  /** Real score entered by an admin. Required before a match can be marked finished. */
+  /** Target final outcome (e.g. "home", "draw", "away") */
+  outcome?: AdminMatchOutcome | undefined;
+  /** Encoded target score and duration (e.g. "2-1" or "2-1:90") */
+  outcomeScore?: string | undefined;
+  targetOutcome?: AdminMatchOutcome | undefined;
+  targetHomeScore?: number | undefined;
+  targetAwayScore?: number | undefined;
+  durationMinutes?: number | undefined;
+  minute?: number | undefined;
+  /** Real score entered by an admin or reached at FT. */
   homeScore?: number | undefined;
   awayScore?: number | undefined;
   createdAt: string;
+}
+
+/**
+ * Parses target outcome, target scores, and duration from an AdminMatch.
+ */
+export function parseAdminMatchOutcome(am: {
+  outcome?: string | undefined;
+  outcomeScore?: string | undefined;
+  targetOutcome?: AdminMatchOutcome | undefined;
+  targetHomeScore?: number | undefined;
+  targetAwayScore?: number | undefined;
+  durationMinutes?: number | undefined;
+}): {
+  targetHome: number;
+  targetAway: number;
+  outcome: AdminMatchOutcome;
+  durationMinutes: number;
+} {
+  let targetHome = typeof am.targetHomeScore === "number" ? am.targetHomeScore : undefined;
+  let targetAway = typeof am.targetAwayScore === "number" ? am.targetAwayScore : undefined;
+  let duration =
+    typeof am.durationMinutes === "number" && am.durationMinutes > 0
+      ? am.durationMinutes
+      : 90;
+
+  if (
+    (targetHome === undefined || targetAway === undefined) &&
+    typeof am.outcomeScore === "string"
+  ) {
+    const [scorePart, durPart] = am.outcomeScore.split(":");
+    if (durPart && !isNaN(Number(durPart)) && Number(durPart) > 0) {
+      duration = Number(durPart);
+    }
+    const [hStr, aStr] = (scorePart || "").split("-");
+    const h = parseInt(hStr || "", 10);
+    const a = parseInt(aStr || "", 10);
+    if (!isNaN(h) && !isNaN(a)) {
+      targetHome = h;
+      targetAway = a;
+    }
+  }
+
+  // Fallback defaults
+  if (targetHome === undefined || targetAway === undefined) {
+    targetHome = 1;
+    targetAway = 0;
+  }
+
+  const rawOutcome = am.targetOutcome || am.outcome;
+  const outcome: AdminMatchOutcome =
+    rawOutcome === "home" || rawOutcome === "draw" || rawOutcome === "away"
+      ? rawOutcome
+      : targetHome > targetAway
+        ? "home"
+        : targetHome < targetAway
+          ? "away"
+          : "draw";
+
+  return { targetHome, targetAway, outcome, durationMinutes: duration };
+}
+
+/**
+ * Deterministically distributes target goals across the 90 virtual match minutes.
+ */
+export function getGoalSchedule(
+  matchId: string,
+  targetHome: number,
+  targetAway: number,
+): { minute: number; team: "home" | "away" }[] {
+  const total = targetHome + targetAway;
+  if (total <= 0) return [];
+
+  const seed = stringHash(matchId);
+  const teamPool: ("home" | "away")[] = [
+    ...Array(targetHome).fill("home"),
+    ...Array(targetAway).fill("away"),
+  ];
+
+  // Deterministic Fisher-Yates shuffle
+  for (let i = teamPool.length - 1; i > 0; i--) {
+    const j = Math.abs((seed * (i + 1) * 31) % (i + 1));
+    const tmp = teamPool[i];
+    teamPool[i] = teamPool[j];
+    teamPool[j] = tmp;
+  }
+
+  const step = 84 / (total + 1);
+  const minutes: number[] = [];
+
+  for (let i = 0; i < total; i++) {
+    const baseMin = Math.round(step * (i + 1));
+    const jitter = ((seed * (i + 7) * 17) % 9) - 4; // -4 to +4
+    const min = Math.max(5, Math.min(88, baseMin + jitter));
+    minutes.push(min);
+  }
+
+  minutes.sort((a, b) => a - b);
+  for (let i = 1; i < minutes.length; i++) {
+    if (minutes[i] <= minutes[i - 1]) {
+      minutes[i] = Math.min(89, minutes[i - 1] + 2);
+    }
+  }
+
+  return minutes.map((minute, i) => ({
+    minute,
+    team: teamPool[i],
+  }));
+}
+
+export interface AdminMatchLiveState {
+  status: MatchStatus;
+  minute?: number | undefined;
+  homeScore?: number | undefined;
+  awayScore?: number | undefined;
+  isCompleted: boolean;
+  targetHome: number;
+  targetAway: number;
+  targetOutcome: AdminMatchOutcome;
+  durationMinutes: number;
+}
+
+/**
+ * Calculates current real-time or simulated state of an AdminMatch.
+ * Advances through live minutes and guarantees final score equals the target outcome.
+ */
+export function computeAdminMatchLiveState(
+  am: AdminMatch,
+  now = Date.now(),
+): AdminMatchLiveState {
+  const { targetHome, targetAway, outcome, durationMinutes } = parseAdminMatchOutcome(am);
+
+  if (am.status === "cancelled") {
+    return {
+      status: "CANCELLED",
+      minute: undefined,
+      homeScore: undefined,
+      awayScore: undefined,
+      isCompleted: true,
+      targetHome,
+      targetAway,
+      targetOutcome: outcome,
+      durationMinutes,
+    };
+  }
+
+  if (am.status === "finished") {
+    return {
+      status: "FINISHED",
+      minute: 90,
+      homeScore: typeof am.homeScore === "number" ? am.homeScore : targetHome,
+      awayScore: typeof am.awayScore === "number" ? am.awayScore : targetAway,
+      isCompleted: true,
+      targetHome,
+      targetAway,
+      targetOutcome: outcome,
+      durationMinutes,
+    };
+  }
+
+  const kickoffMs = new Date(adminKickoffIso(am)).getTime();
+  const validKickoff = isNaN(kickoffMs) ? now : kickoffMs;
+  const durationMs = durationMinutes * 60 * 1000;
+  const endMs = validKickoff + durationMs;
+
+  const isStarted = now >= validKickoff || am.status === "live";
+
+  if (!isStarted) {
+    return {
+      status: "SCHEDULED",
+      minute: undefined,
+      homeScore: undefined,
+      awayScore: undefined,
+      isCompleted: false,
+      targetHome,
+      targetAway,
+      targetOutcome: outcome,
+      durationMinutes,
+    };
+  }
+
+  // End of match duration reached — finish exactly with target outcome!
+  if (now >= endMs) {
+    return {
+      status: "FINISHED",
+      minute: 90,
+      homeScore: typeof am.homeScore === "number" ? am.homeScore : targetHome,
+      awayScore: typeof am.awayScore === "number" ? am.awayScore : targetAway,
+      isCompleted: true,
+      targetHome,
+      targetAway,
+      targetOutcome: outcome,
+      durationMinutes,
+    };
+  }
+
+  // Currently live: calculate minute 1' to 90' and progressive score
+  const effectiveKickoff = now < validKickoff ? now - 1000 : validKickoff;
+  const elapsed = Math.max(0, now - effectiveKickoff);
+  const ratio = Math.min(1, elapsed / durationMs);
+  const simMinute = Math.min(90, Math.max(1, Math.floor(ratio * 90) + 1));
+
+  const goals = getGoalSchedule(am.id, targetHome, targetAway);
+  let liveHome = 0;
+  let liveAway = 0;
+  for (const g of goals) {
+    if (g.minute <= simMinute) {
+      if (g.team === "home") liveHome++;
+      else liveAway++;
+    }
+  }
+
+  return {
+    status: "LIVE",
+    minute: simMinute,
+    homeScore: liveHome,
+    awayScore: liveAway,
+    isCompleted: false,
+    targetHome,
+    targetAway,
+    targetOutcome: outcome,
+    durationMinutes,
+  };
 }
 
 /**
@@ -129,7 +366,11 @@ export interface ConvertedAdminMatch {
 }
 
 /** Pure conversion of an admin fixture into a Match (no global side effects). */
-export function buildAdminMatch(am: AdminMatch, leaguesList: AdminLeague[]): ConvertedAdminMatch {
+export function buildAdminMatch(
+  am: AdminMatch,
+  leaguesList: AdminLeague[],
+  now = Date.now(),
+): ConvertedAdminMatch {
   const homeId = `adm-team-h-${am.id}`;
   const awayId = `adm-team-a-${am.id}`;
   const lg = leaguesList.find((l) => l.id === am.leagueId);
@@ -169,17 +410,7 @@ export function buildAdminMatch(am: AdminMatch, leaguesList: AdminLeague[]): Con
     logo: am.awayLogoUrl || undefined,
   };
 
-  // Status comes only from the admin. Kickoff time still locks betting (isMatchLocked).
-  const status: MatchStatus =
-    am.status === "finished"
-      ? "FINISHED"
-      : am.status === "live"
-        ? "LIVE"
-        : am.status === "cancelled"
-          ? "CANCELLED"
-          : "SCHEDULED";
-
-  const hasScore = typeof am.homeScore === "number" && typeof am.awayScore === "number";
+  const liveState = computeAdminMatchLiveState(am, now);
 
   const match: Match = {
     id: am.id,
@@ -189,10 +420,10 @@ export function buildAdminMatch(am: AdminMatch, leaguesList: AdminLeague[]): Con
     homeId,
     awayId,
     kickoff: adminKickoffIso(am),
-    status,
-    minute: undefined,
-    homeScore: hasScore && status !== "SCHEDULED" ? am.homeScore : undefined,
-    awayScore: hasScore && status !== "SCHEDULED" ? am.awayScore : undefined,
+    status: liveState.status,
+    minute: liveState.minute,
+    homeScore: liveState.homeScore,
+    awayScore: liveState.awayScore,
     venue: `${am.homeTeam} Arena`,
     hot: true,
     markets: generateAdminMatchMarkets(am),
@@ -202,8 +433,12 @@ export function buildAdminMatch(am: AdminMatch, leaguesList: AdminLeague[]): Con
 }
 
 /** Browser helper: converts and registers teams/league so UI lookups resolve. */
-export function convertAdminMatchToMatch(am: AdminMatch, leaguesList: AdminLeague[]): Match {
-  const { match, league, homeTeam, awayTeam } = buildAdminMatch(am, leaguesList);
+export function convertAdminMatchToMatch(
+  am: AdminMatch,
+  leaguesList: AdminLeague[],
+  now = Date.now(),
+): Match {
+  const { match, league, homeTeam, awayTeam } = buildAdminMatch(am, leaguesList, now);
   if (league) dynamicLeagues.set(league.id, league);
   dynamicTeams.set(homeTeam.id, homeTeam);
   dynamicTeams.set(awayTeam.id, awayTeam);
@@ -213,6 +448,35 @@ export function convertAdminMatchToMatch(am: AdminMatch, leaguesList: AdminLeagu
 
 /** Row mapping shared by browser and server. */
 export function adminMatchFromRow(m: any): AdminMatch {
+  let targetHomeScore = typeof m.target_home_score === "number" ? m.target_home_score : undefined;
+  let targetAwayScore = typeof m.target_away_score === "number" ? m.target_away_score : undefined;
+  let durationMinutes = typeof m.duration_minutes === "number" ? m.duration_minutes : undefined;
+
+  const outcomeScore = typeof m.outcome_score === "string" ? m.outcome_score : undefined;
+  if ((targetHomeScore === undefined || targetAwayScore === undefined) && outcomeScore) {
+    const [scorePart, durPart] = outcomeScore.split(":");
+    if (durPart && !isNaN(Number(durPart))) {
+      durationMinutes = Number(durPart);
+    }
+    const [hStr, aStr] = (scorePart || "").split("-");
+    const h = parseInt(hStr || "", 10);
+    const a = parseInt(aStr || "", 10);
+    if (!isNaN(h) && !isNaN(a)) {
+      targetHomeScore = h;
+      targetAwayScore = a;
+    }
+  }
+
+  const rawOutcome =
+    m.outcome ||
+    (targetHomeScore !== undefined && targetAwayScore !== undefined
+      ? targetHomeScore > targetAwayScore
+        ? "home"
+        : targetHomeScore < targetAwayScore
+          ? "away"
+          : "draw"
+      : undefined);
+
   return {
     id: m.id,
     leagueId: m.league_id,
@@ -225,6 +489,16 @@ export function adminMatchFromRow(m: any): AdminMatch {
     status: (["scheduled", "live", "finished", "cancelled"].includes(m.status)
       ? m.status
       : "scheduled") as AdminMatch["status"],
+    outcome: (["home", "draw", "away"].includes(rawOutcome)
+      ? rawOutcome
+      : undefined) as AdminMatchOutcome | undefined,
+    outcomeScore,
+    targetOutcome: (["home", "draw", "away"].includes(rawOutcome)
+      ? rawOutcome
+      : undefined) as AdminMatchOutcome | undefined,
+    targetHomeScore,
+    targetAwayScore,
+    durationMinutes: durationMinutes || 90,
     homeScore: typeof m.home_score === "number" ? m.home_score : undefined,
     awayScore: typeof m.away_score === "number" ? m.away_score : undefined,
     createdAt: m.created_at,
@@ -232,12 +506,27 @@ export function adminMatchFromRow(m: any): AdminMatch {
 }
 
 export function adminLeagueFromRow(l: any): AdminLeague {
+  let defaultHomeScore: number | undefined;
+  let defaultAwayScore: number | undefined;
+  if (typeof l.default_outcome_score === "string") {
+    const [hStr, aStr] = l.default_outcome_score.split("-");
+    const h = parseInt(hStr || "", 10);
+    const a = parseInt(aStr || "", 10);
+    if (!isNaN(h) && !isNaN(a)) {
+      defaultHomeScore = h;
+      defaultAwayScore = a;
+    }
+  }
   return {
     id: l.id,
     name: l.name,
     country: l.country,
     color: l.color,
     logoUrl: l.logo_url || undefined,
+    defaultOutcome: l.default_target_outcome || undefined,
+    defaultOutcomeScore: l.default_outcome_score || undefined,
+    defaultHomeScore,
+    defaultAwayScore,
     createdAt: l.created_at,
   };
 }

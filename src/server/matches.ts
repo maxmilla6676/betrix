@@ -11,7 +11,12 @@ import {
   sourceById,
   type SportsApiSource,
 } from "@/lib/espn";
-import { adminLeagueFromRow, adminMatchFromRow, buildAdminMatch } from "@/data/adminMatches";
+import {
+  adminLeagueFromRow,
+  adminMatchFromRow,
+  buildAdminMatch,
+  computeAdminMatchLiveState,
+} from "@/data/adminMatches";
 import { adminDb } from "./db";
 
 export interface ResolvedMatch {
@@ -87,7 +92,25 @@ async function resolveAdminMatch(matchId: string): Promise<ResolvedMatch | null>
   if (!row) return null;
   const am = adminMatchFromRow(row);
   const { data: lgRows } = await db.from("admin_leagues").select("*").eq("id", am.leagueId);
-  const { match } = buildAdminMatch(am, (lgRows || []).map(adminLeagueFromRow));
+  const now = Date.now();
+  const liveState = computeAdminMatchLiveState(am, now);
+
+  if (liveState.isCompleted && liveState.status === "FINISHED" && row.status !== "finished") {
+    try {
+      await db
+        .from("admin_matches")
+        .update({
+          status: "finished",
+          home_score: liveState.homeScore,
+          away_score: liveState.awayScore,
+        })
+        .eq("id", matchId);
+    } catch {
+      // Best-effort auto-finish
+    }
+  }
+
+  const { match } = buildAdminMatch(am, (lgRows || []).map(adminLeagueFromRow), now);
   return { match, title: `${am.homeTeam} vs ${am.awayTeam}` };
 }
 
