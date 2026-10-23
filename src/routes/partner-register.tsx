@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ShieldCheck,
   Sparkles,
@@ -17,6 +17,8 @@ import {
   Phone,
   Radio,
   ExternalLink,
+  Copy,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { BetrixLogo, BetrixWordmark } from "@/components/brand/Logo";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
+import { normalizePhone } from "@/lib/phone";
 
 export const Route = createFileRoute("/partner-register")({
   head: () => ({
@@ -42,7 +45,12 @@ export const Route = createFileRoute("/partner-register")({
 
 export function PartnerRegisterPage() {
   const navigate = useNavigate();
-  const { registerPartner } = useBetrix();
+  const { registerPartner, isLoggedIn, profile, partnersList, refreshProfile, login } = useBetrix();
+
+  const isPhoneMatch = (a?: string, b?: string) =>
+    Boolean(a && b && (a === b || normalizePhone(a) === normalizePhone(b)));
+
+  const myPartner = partnersList.find((p) => isPhoneMatch(p.phone, profile.phone));
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -53,11 +61,27 @@ export function PartnerRegisterPage() {
   const [audienceSize, setAudienceSize] = useState("5,000 - 20,000 members");
   const [agreed, setAgreed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [submittedPartner, setSubmittedPartner] = useState<{
     id: string;
     name: string;
     code: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      void refreshProfile();
+    }
+  }, [isLoggedIn, refreshProfile]);
+
+  useEffect(() => {
+    if (isLoggedIn && profile.phone && !phone) {
+      setPhone(profile.phone);
+    }
+    if (isLoggedIn && profile.userId && !name) {
+      setName(profile.userId);
+    }
+  }, [isLoggedIn, profile.phone, profile.userId, phone, name]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,17 +94,19 @@ export function PartnerRegisterPage() {
       toast.error("Please enter a valid email address");
       return;
     }
-    if (!phone.trim() || phone.replace(/D/g, "").length < 9) {
+    if (!phone.trim() || phone.replace(/\D/g, "").length < 9) {
       toast.error("Please enter a valid Ghanaian mobile phone number");
       return;
     }
-    if (password.length < 6) {
-      toast.error("Choose a password of at least 6 characters.");
-      return;
-    }
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
-      return;
+    if (!isLoggedIn) {
+      if (password.length < 6) {
+        toast.error("Choose a password of at least 6 characters.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        toast.error("Passwords do not match.");
+        return;
+      }
     }
     if (!agreed) {
       toast.error("Please confirm acceptance of partner terms");
@@ -89,11 +115,22 @@ export function PartnerRegisterPage() {
 
     setIsSubmitting(true);
     const res = await registerPartner({ name, email, phone, password, channel, audienceSize });
-    setIsSubmitting(false);
     if (!res.code) {
+      setIsSubmitting(false);
       toast.error(res.error || "Could not submit your application.");
       return;
     }
+
+    // If guest registered, auto-login with phone & password
+    if (!isLoggedIn && password) {
+      try {
+        await login(phone, password);
+      } catch (loginErr) {
+        console.warn("Auto-login after partner application:", loginErr);
+      }
+    }
+    await refreshProfile();
+    setIsSubmitting(false);
     setSubmittedPartner({ id: res.code, name: name.trim(), code: res.code });
     toast.success("Application submitted! An administrator will review it shortly.");
   };
@@ -133,7 +170,84 @@ export function PartnerRegisterPage() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-8 relative z-10">
-        {submittedPartner ? (
+        {myPartner && myPartner.status === "APPROVED" ? (
+          /* ── ACTIVE APPROVED PARTNER STATE ── */
+          <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
+            <div className="bg-[#15151c] border border-emerald-500/30 rounded-3xl p-6 sm:p-10 shadow-2xl text-center space-y-6">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-[0_0_30px_rgba(16,185,129,0.2)]">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+
+              <div className="space-y-2">
+                <Badge className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold uppercase tracking-widest text-[11px] px-3 py-1">
+                  Partner Account Active
+                </Badge>
+                <h1 className="text-2xl sm:text-3xl font-black text-white">
+                  Welcome back, {myPartner.name}!
+                </h1>
+                <p className="text-sm text-gray-300 max-w-lg mx-auto">
+                  You are an approved BETRIX partner with an active{" "}
+                  <strong className="text-emerald-400">{myPartner.commissionRate}% commission rate</strong>.
+                  Share your referral link below to earn lifetime commissions on all deposits made by your referrals.
+                </p>
+              </div>
+
+              {/* Referral Link Card */}
+              <div className="bg-[#1b1b24] border border-[#292936] rounded-2xl p-4 max-w-xl mx-auto text-left space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400 font-medium">Your Unique Referral Link:</span>
+                  <span className="font-mono font-bold text-[#F5C400] text-xs">
+                    Code: {myPartner.code}
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate rounded-xl border border-[#332E5E] bg-[#121026] px-3 py-2.5 font-mono text-xs text-white w-full">
+                    {typeof window !== "undefined"
+                      ? `${window.location.origin}/auth?mode=signup&ref=${myPartner.code}`
+                      : `https://betrix.app/auth?mode=signup&ref=${myPartner.code}`}
+                  </code>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const link = `${window.location.origin}/auth?mode=signup&ref=${myPartner.code}`;
+                      void navigator.clipboard.writeText(link);
+                      setCopiedLink(true);
+                      toast.success("Referral link copied!");
+                      setTimeout(() => setCopiedLink(false), 2000);
+                    }}
+                    className="w-full sm:w-auto bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs h-10 px-4 rounded-xl flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    {copiedLink ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    <span>{copiedLink ? "Copied" : "Copy Link"}</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <Button
+                  asChild
+                  className="w-full sm:w-auto bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs h-11 rounded-xl px-6 uppercase tracking-wider"
+                >
+                  <Link to="/partners">
+                    <span>Open Partner Dashboard</span>
+                    <ArrowRight className="h-4 w-4 ml-1.5" />
+                  </Link>
+                </Button>
+
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full sm:w-auto border-[#2b2b3a] bg-[#1a1a24] text-gray-200 font-bold text-xs h-11 rounded-xl px-5 hover:bg-[#232330]"
+                >
+                  <Link to="/">
+                    <span>Back to Sportsbook</span>
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (submittedPartner || (myPartner && myPartner.status === "PENDING")) ? (
           /* ── SUBMISSION SUCCESS & PENDING STATE ── */
           <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
             <div className="bg-[#15151c] border border-[#2b2b3a] rounded-3xl p-6 sm:p-10 shadow-2xl text-center space-y-6">
@@ -146,7 +260,7 @@ export function PartnerRegisterPage() {
                   Application Under Review
                 </Badge>
                 <h1 className="text-2xl sm:text-3xl font-black text-white">
-                  Registration Received, {submittedPartner.name}!
+                  Registration Received, {myPartner?.name || submittedPartner?.name || name}!
                 </h1>
                 <p className="text-sm text-gray-300 max-w-lg mx-auto">
                   Your BETRIX partner application has been registered successfully. An administrator
@@ -160,7 +274,7 @@ export function PartnerRegisterPage() {
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-gray-400 font-medium">Assigned Partner Code:</span>
                   <span className="font-mono font-black text-[#F5C400] text-sm bg-[#121217] px-2 py-0.5 rounded-lg border border-[#2b2b3a]">
-                    {submittedPartner.code}
+                    {myPartner?.code || submittedPartner?.code}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs">
@@ -181,9 +295,7 @@ export function PartnerRegisterPage() {
                 <div>
                   <p className="font-extrabold text-white">Next step: approval</p>
                   <p className="text-gray-400 mt-1">
-                    Once BETRIX approves you, log in with{" "}
-                    <strong className="text-white">{phone}</strong> and the password you just set,
-                    then open <strong className="text-white">Me → Partner Dashboard</strong> to copy
+                    Once BETRIX approves you, open <strong className="text-white">Me → Partner Dashboard</strong> or tap below to copy
                     your referral link and track deposits and earnings.
                   </p>
                 </div>
@@ -285,6 +397,20 @@ export function PartnerRegisterPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {isLoggedIn && (
+                  <div className="p-3.5 rounded-2xl bg-[#1b1928] border border-[#F5C400]/30 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] uppercase font-black text-[#F5C400] tracking-wider">
+                        Applying with Connected Account
+                      </span>
+                      <p className="font-mono font-bold text-white mt-0.5">{profile.phone}</p>
+                    </div>
+                    <span className="bg-emerald-500/20 text-emerald-400 font-bold text-[10px] px-2.5 py-1 rounded-full border border-emerald-500/30">
+                      Logged In
+                    </span>
+                  </div>
+                )}
+
                 {/* Full / Brand Name */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -331,45 +457,47 @@ export function PartnerRegisterPage() {
                       <Input
                         type="tel"
                         required
+                        disabled={isLoggedIn && Boolean(profile.phone)}
                         placeholder="024 123 4567"
                         value={phone}
                         aria-label="Ghana mobile number"
                         onChange={(e) => setPhone(e.target.value)}
-                        className="border-0 bg-transparent h-11 text-sm font-bold text-white px-3 focus-visible:ring-0 focus-visible:ring-offset-0"
+                        className="border-0 bg-transparent h-11 text-sm font-bold text-white px-3 focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-70"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <p className="text-[11px] text-gray-400">
-                    You&apos;ll log in with this phone number and password to open your Partner
-                    Dashboard once you&apos;re approved. If the number already has a BETRIX account,
-                    enter that account&apos;s password.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Input
-                      type="password"
-                      required
-                      autoComplete="new-password"
-                      placeholder="Password (min 6 characters)"
-                      aria-label="Password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
-                    />
-                    <Input
-                      type="password"
-                      required
-                      autoComplete="new-password"
-                      placeholder="Confirm password"
-                      aria-label="Confirm password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
-                    />
+                {!isLoggedIn && (
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-gray-400">
+                      Create a password to access your Partner Dashboard once approved. If this number already has a BETRIX account,
+                      enter that account&apos;s password.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input
+                        type="password"
+                        required
+                        autoComplete="new-password"
+                        placeholder="Password (min 6 characters)"
+                        aria-label="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
+                      />
+                      <Input
+                        type="password"
+                        required
+                        autoComplete="new-password"
+                        placeholder="Confirm password"
+                        aria-label="Confirm password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="bg-[#1b1b24] border-[#2c2c3b] text-white text-sm h-11 rounded-xl focus:border-[#F5C400]"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Marketing Channel & Audience */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

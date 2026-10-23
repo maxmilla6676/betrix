@@ -5,6 +5,7 @@ import {
   Bell,
   CheckCircle2,
   ChevronRight,
+  Clock,
   Copy,
   CreditCard,
   Eye,
@@ -30,6 +31,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
 import { BetrixLogo } from "@/components/brand/Logo";
+import { normalizePhone } from "@/lib/phone";
 
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
 
@@ -57,8 +59,9 @@ function ProfilePage() {
     logout,
     withdraw,
   } = useBetrix();
-  // RLS only returns a partner row to its owner (matched by phone), or every row to admins.
-  const myPartner = partnersList.find((p) => p.phone === profile.phone);
+  const isPhoneMatch = (a?: string, b?: string) =>
+    Boolean(a && b && (a === b || normalizePhone(a) === normalizePhone(b)));
+  const myPartner = partnersList.find((p) => isPhoneMatch(p.phone, profile.phone));
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
@@ -389,8 +392,8 @@ function ProfilePage() {
             <ChevronRight className="h-5 w-5 text-gray-500" />
           </button>
 
-          {/* Partner Dashboard — only for partners (and admins) */}
-          {(myPartner || isAdmin) && (
+          {/* Partner Row: Active, Pending Review, or Apply */}
+          {myPartner?.status === "APPROVED" || isAdmin ? (
             <Link
               to="/partners"
               className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
@@ -405,11 +408,51 @@ function ProfilePage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {myPartner && (
-                  <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                    {myPartner.status === "APPROVED" ? "PARTNER" : myPartner.status}
-                  </span>
-                )}
+                <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
+                  ACTIVE PARTNER
+                </span>
+                <ChevronRight className="h-5 w-5 text-gray-500" />
+              </div>
+            </Link>
+          ) : myPartner?.status === "PENDING" ? (
+            <Link
+              to="/partners"
+              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                  <Clock className="h-5 w-5 text-amber-400 animate-pulse" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-white">Partner Application</p>
+                  <p className="text-xs font-medium text-amber-300">Under review by administrator</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="bg-amber-500/20 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-amber-500/30">
+                  PENDING REVIEW
+                </span>
+                <ChevronRight className="h-5 w-5 text-gray-500" />
+              </div>
+            </Link>
+          ) : (
+            <Link
+              to="/partner-register"
+              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left bg-gradient-to-r from-transparent to-[#F5C400]/5"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-[#F5C400]/10 border border-[#F5C400]/30 flex items-center justify-center shrink-0">
+                  <Handshake className="h-5 w-5 text-[#F5C400]" />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-white">Become a BETRIX Partner</p>
+                  <p className="text-xs font-medium text-gray-400">Earn lifetime commission on user deposits</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="bg-[#F5C400]/20 text-[#F5C400] text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-[#F5C400]/30">
+                  APPLY
+                </span>
                 <ChevronRight className="h-5 w-5 text-gray-500" />
               </div>
             </Link>

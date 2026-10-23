@@ -25,13 +25,14 @@ async function passwordMatches(phone: string, password: string) {
   return !error;
 }
 
+import { requireUser } from "./auth";
+
 /**
  * Partner application. The applicant's phone + password become their login for
  * the partner dashboard: a new account is created for an unknown number, and an
- * existing account must prove the password (so nobody can apply with someone
- * else's number).
+ * existing account must prove the password (or already be authenticated via Bearer token).
  */
-export async function applyAsPartner(body: Record<string, unknown>) {
+export async function applyAsPartner(body: Record<string, unknown>, req?: Request) {
   const name = str(body["name"], 120);
   const email = str(body["email"], 200);
   const phone = normalizePhone(String(body["phone"] || ""));
@@ -44,17 +45,43 @@ export async function applyAsPartner(body: Record<string, unknown>) {
   if (!isValidGhanaPhone(phone)) {
     throw new HttpError(400, "Enter a valid Ghana phone number (e.g. 024 123 4567).");
   }
-  if (password.length < 6) throw new HttpError(400, "Password must be at least 6 characters.");
+
+  // Check if caller is already logged in as this phone number
+  let isCallerOwner = false;
+  if (req) {
+    try {
+      const user = await requireUser(req);
+      if (normalizePhone(user.phone) === phone) {
+        isCallerOwner = true;
+      }
+    } catch {
+      // Not logged in or expired token; fallback to password verification
+    }
+  }
+
+  if (!isCallerOwner && password.length < 6) {
+    throw new HttpError(400, "Password must be at least 6 characters.");
+  }
 
   const db = adminDb();
   const { data: existing } = await db
     .from("partners")
-    .select("id")
+    .select("id, status")
     .eq("phone", phone)
     .in("status", ["PENDING", "APPROVED"])
     .maybeSingle();
-  if (existing)
-    throw new HttpError(409, "A partner application already exists for this phone number.");
+  if (existing) {
+    if (existing.status === "APPROVED") {
+      throw new HttpError(
+        409,
+        "You are already an approved BETRIX partner! Please visit your Partner Dashboard.",
+      );
+    }
+    throw new HttpError(
+      409,
+      "A partner application already exists for this phone number and is pending review.",
+    );
+  }
 
   const { data: profile } = await db
     .from("profiles")
@@ -62,14 +89,19 @@ export async function applyAsPartner(body: Record<string, unknown>) {
     .eq("phone", phone)
     .maybeSingle();
   if (!profile) {
+    if (!password) {
+      throw new HttpError(400, "Please choose a password of at least 6 characters.");
+    }
     await registerAccount({ phone, password });
-  } else if (!profile.auth_id) {
-    await migrateLegacyAccount({ phone, password }); // verifies the old password
-  } else if (!(await passwordMatches(phone, password))) {
-    throw new HttpError(
-      401,
-      "This number already has a BETRIX account and the password doesn't match. Use that account's password.",
-    );
+  } else if (!isCallerOwner) {
+    if (!profile.auth_id) {
+      await migrateLegacyAccount({ phone, password }); // verifies the old password
+    } else if (!(await passwordMatches(phone, password))) {
+      throw new HttpError(
+        401,
+        "This number already has a BETRIX account and the password doesn't match. Use that account's password.",
+      );
+    }
   }
 
   const { data: code, error } = await db.rpc("apply_partner", {

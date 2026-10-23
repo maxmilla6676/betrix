@@ -333,9 +333,9 @@ They will no longer be able to log in. Their bet and transaction history is kept
     setTimeout(() => setCopiedUserLinkCode(null), 2500);
   };
 
-  const handleApprovePartner = (partnerId: string, partnerName: string) => {
+  const handleApprovePartner = async (partnerId: string, partnerName: string) => {
     const customRate = pendingRates[partnerId] ?? 12;
-    approvePartner(partnerId, customRate);
+    await approvePartner(partnerId, customRate);
     toast.success(`Approved ${partnerName}! Referral link active with ${customRate}% commission.`);
   };
 

@@ -7,7 +7,7 @@ export const Route = createFileRoute("/api/partners/apply")({
     handlers: {
       POST: handle(async ({ request }) => {
         rateLimit(`partner-apply:${clientIp(request)}`, 5, 15 * 60_000);
-        return json(await applyAsPartner(await readJson(request)));
+        return json(await applyAsPartner(await readJson(request), request));
       }),
     },
   },
