@@ -13,7 +13,7 @@ import {
   type PayoutNetwork,
 } from "./seev";
 
-export const DEPOSIT_LIMITS = { min: 1, max: 10000 } as const;
+export const DEPOSIT_LIMITS = { min: 250, max: 10000 } as const;
 export const WITHDRAW_LIMITS = { min: 1, max: 5000 } as const;
 
 async function currentBalance(profileId: string): Promise<number> {

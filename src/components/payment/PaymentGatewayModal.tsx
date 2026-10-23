@@ -13,8 +13,8 @@ export interface PaymentGatewayModalProps {
   defaultAmount?: number;
 }
 
-const PRESET_AMOUNTS = [30, 50, 100, 200, 300, 500, 1000];
-const MIN_DEPOSIT = 1;
+const PRESET_AMOUNTS = [250, 300, 500, 1000, 2000, 5000];
+const MIN_DEPOSIT = 250;
 const MAX_DEPOSIT = 10000;
 
 /** Session key the wallet page reads after SeevPlus redirects back. */
@@ -23,7 +23,7 @@ export const PENDING_DEPOSIT_KEY = "betrix.pendingDeposit";
 export function PaymentGatewayModal({
   open,
   onOpenChange,
-  defaultAmount = 300,
+  defaultAmount = 250,
 }: PaymentGatewayModalProps) {
   const { profile, isLoggedIn, startDeposit } = useBetrix();
   const [amount, setAmount] = useState<number>(defaultAmount);
@@ -78,7 +78,7 @@ export function PaymentGatewayModal({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div className="space-y-2">
             <label className="text-xs font-extrabold text-gray-300 uppercase tracking-wider flex items-center justify-between">
-              <span>Amount (GHS)</span>
+              <span>Amount (GHS) <span className="text-[10px] text-gray-400 font-semibold">(Min: GHS 250)</span></span>
               <span className="text-xs font-mono font-bold text-[#F5C400]">
                 {formatGHS(amount || 0)}
               </span>
@@ -111,7 +111,7 @@ export function PaymentGatewayModal({
                 step={1}
                 value={amount || ""}
                 onChange={(e) => setAmount(Number(e.target.value))}
-                placeholder="Enter amount"
+                placeholder="Min 250"
                 aria-label="Deposit amount in GHS"
                 className="bg-[#1c1c24] border-[#2a2a38] text-white font-mono text-lg font-extrabold pl-14 h-12 rounded-xl focus:border-[#F5C400] focus:ring-0"
               />

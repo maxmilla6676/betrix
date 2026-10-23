@@ -123,7 +123,7 @@ function ProfilePage() {
     <div className="min-h-screen bg-[#121026] text-white p-3 md:p-6 space-y-4 pb-24">
 
       {/* ── REAL PAYMENT GATEWAY MODAL ── */}
-      <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={300} />
+      <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={250} />
 
       {/* ── WITHDRAWAL MODAL ── */}
       <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>

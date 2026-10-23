@@ -105,7 +105,7 @@ function WalletPage() {
 
   return (
     <div className="space-y-4 p-3 md:p-6">
-      <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={300} />
+      <PaymentGatewayModal open={depositOpen} onOpenChange={setDepositOpen} defaultAmount={250} />
 
       {depositState === "checking" && (
         <div role="status" className="flex items-center gap-2 rounded-2xl border border-[#F5C400]/30 bg-[#F5C400]/10 p-3 text-xs font-bold text-[#F5C400]">
