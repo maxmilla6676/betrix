@@ -109,6 +109,7 @@ function AdminPage() {
     totalRevenue,
     todayRevenue,
     devCommission,
+    gatewayCommission,
     totalPartnersCount,
     totalUsersCount,
     activeAnalysesCount,
@@ -460,8 +461,8 @@ They will no longer be able to log in. Their bet and transaction history is kept
           </div>
         )}
 
-        {/* ── STAT CARDS ROW 2: Members, Partners, Dev Commission ── */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* ── STAT CARDS ROW 2: Members, Partners, Gateway Commission, Dev Commission ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {/* 3. Total Members */}
           <div
             onClick={() => setActiveTab("users")}
@@ -492,7 +493,23 @@ They will no longer be able to log in. Their bet and transaction history is kept
             <span className="text-[10px] text-gray-500 mt-1">Active affiliates</span>
           </div>
 
-          {/* 5. Dev Commission (20% of today's revenue) */}
+          {/* 5. Gateway Commission (15% of today's revenue, resets daily) */}
+          <div
+            onClick={() => setActiveTab("payments")}
+            className="bg-[#121216] rounded-2xl p-4 border border-cyan-500/30 cursor-pointer hover:border-cyan-500/60 transition-all flex flex-col justify-between min-h-[95px] relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-900/10" />
+            <div className="relative flex items-center justify-between">
+              <span className="text-xs font-bold text-cyan-400">Gateway Commission</span>
+              <CreditCard className="h-3.5 w-3.5 text-cyan-400/80" />
+            </div>
+            <p className="relative text-2xl font-black text-cyan-400 mt-2 font-mono">
+              {formatGHC(gatewayCommission)}
+            </p>
+            <span className="relative text-[10px] text-cyan-400/60 mt-1">15% of today's revenue</span>
+          </div>
+
+          {/* 6. Dev Commission (15% of today's revenue, resets daily) */}
           <div
             onClick={() => setActiveTab("payments")}
             className="bg-[#121216] rounded-2xl p-4 border border-[#F5C400]/30 cursor-pointer hover:border-[#F5C400]/60 transition-all flex flex-col justify-between min-h-[95px] relative overflow-hidden"
@@ -503,9 +520,9 @@ They will no longer be able to log in. Their bet and transaction history is kept
               <Percent className="h-3.5 w-3.5 text-[#F5C400]/70" />
             </div>
             <p className="relative text-2xl font-black text-[#F5C400] mt-2 font-mono">
-              {formatGHC(todayRevenue * 0.20)}
+              {formatGHC(devCommission)}
             </p>
-            <span className="relative text-[10px] text-[#F5C400]/50 mt-1">20% of today's income</span>
+            <span className="relative text-[10px] text-[#F5C400]/50 mt-1">15% of today's revenue</span>
           </div>
         </div>
 
@@ -610,7 +627,7 @@ They will no longer be able to log in. Their bet and transaction history is kept
                     Payment Gateway & Platform Revenue Control
                   </h3>
                   <p className="text-xs text-gray-400">
-                    Review incoming user deposits, developer 20% commission, and revenue ledger.
+                    Review incoming user deposits, commissions (15% Gateway, 15% Developer), and revenue ledger.
                   </p>
                 </div>
 
@@ -622,19 +639,35 @@ They will no longer be able to log in. Their bet and transaction history is kept
                 </div>
               </div>
 
-              {/* Dev Commission callout */}
-              <div className="rounded-xl p-3.5 bg-[#F5C400]/10 border border-[#F5C400]/30 flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-[#F5C400]">
-                    Developer 20% Daily Commission
+              {/* Commission callouts (Gateway 15% & Dev 15%) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="rounded-xl p-3.5 bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
+                      <CreditCard className="h-3.5 w-3.5" /> Gateway 15% Daily Commission
+                    </span>
+                    <p className="text-[11px] text-cyan-400/70">
+                      15% of today's incoming platform deposits:
+                    </p>
+                  </div>
+                  <span className="font-mono text-base font-black text-cyan-400">
+                    {formatGHC(gatewayCommission)}
                   </span>
-                  <p className="text-[11px] text-[#F5C400]/70">
-                    20% of today's incoming platform deposits (auto-calculated):
-                  </p>
                 </div>
-                <span className="font-mono text-base font-black text-[#F5C400]">
-                  {formatGHC(todayRevenue * 0.20)}
-                </span>
+
+                <div className="rounded-xl p-3.5 bg-[#F5C400]/10 border border-[#F5C400]/30 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-[#F5C400] flex items-center gap-1.5">
+                      <Percent className="h-3.5 w-3.5" /> Developer 15% Daily Commission
+                    </span>
+                    <p className="text-[11px] text-[#F5C400]/70">
+                      15% of today's incoming platform deposits:
+                    </p>
+                  </div>
+                  <span className="font-mono text-base font-black text-[#F5C400]">
+                    {formatGHC(devCommission)}
+                  </span>
+                </div>
               </div>
 
               {/* Transactions log */}
@@ -804,13 +837,20 @@ They will no longer be able to log in. Their bet and transaction history is kept
           {activeTab === "settings" && (
             <div className="bg-[#121216] rounded-2xl p-4 md:p-5 border border-[#2a2a35] shadow-sm space-y-4 text-xs">
               <h3 className="text-sm font-black text-white">Platform & Gateway Configuration</h3>
-              <p className="text-gray-400">Configure payout gateways, mobile money rails, developer revenue share (20%), and risk parameters.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                <div className="p-3.5 rounded-xl border border-[#2a2a35] bg-[#1e1e26] space-y-1">
-                  <span className="font-bold text-white">Developer Cut</span>
-                  <p className="text-gray-400">20% automatic calculation on all today's platform revenue.</p>
+              <p className="text-gray-400">Configure payout gateways, mobile money rails, commissions (15% Gateway, 15% Developer), and risk parameters.</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                <div className="p-3.5 rounded-xl border border-cyan-500/30 bg-[#1e1e26] space-y-1">
+                  <span className="font-bold text-cyan-400">Gateway Cut</span>
+                  <p className="text-gray-400">15% automatic daily calculation on all today's platform revenue.</p>
+                  <span className="inline-block mt-2 font-mono font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
+                    Active (15.0%)
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-xl border border-[#F5C400]/30 bg-[#1e1e26] space-y-1">
+                  <span className="font-bold text-[#F5C400]">Developer Cut</span>
+                  <p className="text-gray-400">15% automatic daily calculation on all today's platform revenue.</p>
                   <span className="inline-block mt-2 font-mono font-bold text-[#F5C400] bg-[#F5C400]/10 px-2 py-0.5 rounded border border-[#F5C400]/30">
-                    Active (20.0%)
+                    Active (15.0%)
                   </span>
                 </div>
                 <div className="p-3.5 rounded-xl border border-[#2a2a35] bg-[#1e1e26] space-y-1">

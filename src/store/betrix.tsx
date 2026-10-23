@@ -176,6 +176,7 @@ interface BetrixState {
   totalRevenue: number;
   todayRevenue: number;
   devCommission: number;
+  gatewayCommission: number;
   getRevenueForDate: (dateStr: string) => DailyRevenueEntry;
   totalPartnersCount: number;
   totalUsersCount: number;
@@ -923,7 +924,8 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     platformTransactions,
     totalRevenue,
     todayRevenue,
-    devCommission: Number((todayRevenue * 0.2).toFixed(2)),
+    devCommission: Number((todayRevenue * 0.15).toFixed(2)),
+    gatewayCommission: Number((todayRevenue * 0.15).toFixed(2)),
     getRevenueForDate,
     totalPartnersCount: partnersList.filter((p) => p.status === "APPROVED").length,
     totalUsersCount: platformUserCount,
