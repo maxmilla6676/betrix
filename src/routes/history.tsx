@@ -51,133 +51,6 @@ export const Route = createFileRoute("/history")({
   component: HistoryPage,
 });
 
-const DEFAULT_WON_TICKETS: HistoryEntry[] = [
-  {
-    code: "BTX-W113",
-    createdAt: "2026-10-20T19:45:00Z",
-    stake: 900.0,
-    payout: 113917.08,
-    potWin: 113917.08,
-    status: "WON",
-    matchTitle: "Atletico San Luis vs Queretaro FC & 1 other",
-    selections: [
-      {
-        matchId: "m_asl_que",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_home",
-        optionLabel: "Home",
-        multiplier: 2.15,
-        matchTitle: "Atletico San Luis vs Queretaro FC",
-        kickoffTime: "20/10 18:00",
-      },
-      {
-        matchId: "m_vas_boc",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_away",
-        optionLabel: "Away",
-        multiplier: 3.4,
-        matchTitle: "CR Vasco da Gama RJ vs Boca Juniors",
-        kickoffTime: "20/10 20:30",
-      },
-    ],
-  },
-  {
-    code: "BTX-W427",
-    createdAt: "2026-10-20T16:15:00Z",
-    stake: 800.0,
-    payout: 42757.94,
-    potWin: 42757.94,
-    status: "WON",
-    matchTitle: "Bhayangkara Presisi Indonesia FC vs Psim Yogyakarta & 1 other",
-    selections: [
-      {
-        matchId: "m_bhy_psi",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_home",
-        optionLabel: "Home",
-        multiplier: 1.85,
-        matchTitle: "Bhayangkara Presisi Indonesia FC vs Psim Yogyakarta",
-        kickoffTime: "20/10 14:00",
-      },
-      {
-        matchId: "m_dew_per",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_away",
-        optionLabel: "Away",
-        multiplier: 2.9,
-        matchTitle: "Dewa United vs Persijap Jepara",
-        kickoffTime: "20/10 16:30",
-      },
-    ],
-  },
-  {
-    code: "BTX-W931",
-    createdAt: "2026-10-19T21:00:00Z",
-    stake: 900.0,
-    payout: 93110.96,
-    potWin: 93110.96,
-    status: "WON",
-    matchTitle: "Club Leon vs Atlante FC & 1 other",
-    selections: [
-      {
-        matchId: "m_leo_atl",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_home",
-        optionLabel: "Home",
-        multiplier: 2.3,
-        matchTitle: "Club Leon vs Atlante FC",
-        kickoffTime: "19/10 19:00",
-      },
-      {
-        matchId: "m_tol_san",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_away",
-        optionLabel: "Away",
-        multiplier: 2.75,
-        matchTitle: "Deportivo Toluca FC vs Club Santos Laguna",
-        kickoffTime: "19/10 21:15",
-      },
-    ],
-  },
-  {
-    code: "BTX-W198",
-    createdAt: "2026-10-19T14:30:00Z",
-    stake: 800.0,
-    payout: 198586.13,
-    potWin: 198586.13,
-    status: "WON",
-    matchTitle: "Fatih Karagumruk Istanbul vs Ankara Kecioren & 1 other",
-    selections: [
-      {
-        matchId: "m_fat_ank",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_home",
-        optionLabel: "Home",
-        multiplier: 2.4,
-        matchTitle: "Fatih Karagumruk Istanbul vs Ankara Kecioren",
-        kickoffTime: "19/10 13:00",
-      },
-      {
-        matchId: "m_man_mug",
-        marketId: "1x2",
-        marketName: "1X2 (Match Result)",
-        optionId: "opt_home",
-        optionLabel: "Home",
-        multiplier: 2.1,
-        matchTitle: "Manisa Futbol Kulubu vs Muglaspor",
-        kickoffTime: "19/10 15:30",
-      },
-    ],
-  },
-];
-
 function HistoryPage() {
   const {
     history,
@@ -194,9 +67,9 @@ function HistoryPage() {
   // Sub-filters under Open Bets: 'all' | 'cashout' | 'live'
   const [subFilter, setSubFilter] = useState<"all" | "cashout" | "live">("all");
 
-  // History tab filters (defaults to "Settled" like in screenshot)
+  // History tab filters — defaults to "Settled" and "Won" to show actual won tickets
   const [historyStatusFilter, setHistoryStatusFilter] = useState<"Settled" | "All" | "Won" | "Lost" | "Running">("Settled");
-  const [historyResultFilter, setHistoryResultFilter] = useState<"All" | "Won" | "Lost">("All");
+  const [historyResultFilter, setHistoryResultFilter] = useState<"All" | "Won" | "Lost">("Won");
   const [historyStatusOpen, setHistoryStatusOpen] = useState(false);
   const [historyResultOpen, setHistoryResultOpen] = useState(false);
   const [historyDateFilter, setHistoryDateFilter] = useState<string>(""); // "YYYY-MM-DD" or ""
@@ -235,10 +108,7 @@ function HistoryPage() {
     });
   }, []);
   const [showAutoCashoutBanner, setShowAutoCashoutBanner] = useState(true);
-  // Track which ongoing bets are expanded to show match details (default BTX-ACC4 open as in screenshot)
-  const [expandedBetCodes, setExpandedBetCodes] = useState<Record<string, boolean>>({
-    "BTX-ACC4": true,
-  });
+  const [expandedBetCodes, setExpandedBetCodes] = useState<Record<string, boolean>>({});
 
   const toggleExpandBet = (code: string) => {
     setExpandedBetCodes((prev) => ({ ...prev, [code]: !prev[code] }));
@@ -249,15 +119,18 @@ function HistoryPage() {
     return history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
   }, [history, cashedOutCodes]);
 
-  // Settled History list (incorporates user slips and authentic won demo tickets)
+  // Settled History list — strictly actual user tickets from real history, NO dummy data
   const settledBets = useMemo(() => {
     const userSettled = history.filter((h) => h.status !== "PENDING" || !!cashedOutCodes[h.code]);
-    if (userSettled.length > 0) {
-      const userCodes = new Set(userSettled.map((u) => u.code));
-      return [...userSettled, ...DEFAULT_WON_TICKETS.filter((d) => !userCodes.has(d.code))];
+    if (historyResultFilter === "Lost" || historyStatusFilter === "Lost") {
+      return userSettled.filter((h) => h.status === "LOST");
     }
-    return DEFAULT_WON_TICKETS;
-  }, [history, cashedOutCodes]);
+    if (historyStatusFilter === "All" && historyResultFilter === "All") {
+      return userSettled;
+    }
+    // By default: ONLY actual won tickets from real user betting history
+    return userSettled.filter((h) => h.status === "WON");
+  }, [history, cashedOutCodes, historyStatusFilter, historyResultFilter]);
 
   // Filtered settled bets — applies status, result, and date filters
   const filteredSettledBets = useMemo(() => {
@@ -384,54 +257,6 @@ function HistoryPage() {
               ?
             </div>
             <span>How to Cashout?</span>
-          </button>
-
-          {/* Center: Winning Cup Preview */}
-          <button
-            type="button"
-            onClick={() =>
-              showWinningCup({
-                code: "WIN-5394",
-                payout: 5394.17,
-                potWin: 5394.17,
-                stake: 100,
-                matchTitle: "Instant Football Virtuals Multiple (FT)",
-                selections: [
-                  {
-                    matchId: "m_for_mun",
-                    marketId: "1x2",
-                    marketName: "1X2 (Match Result)",
-                    optionId: "opt_away",
-                    optionLabel: "Away",
-                    multiplier: 2.25,
-                    matchTitle: "Nottingham Forest vs Manchester United (FT 1:4)",
-                  },
-                  {
-                    matchId: "m_mci_bha",
-                    marketId: "1x2",
-                    marketName: "1X2 (Match Result)",
-                    optionId: "opt_home",
-                    optionLabel: "Home",
-                    multiplier: 2.04,
-                    matchTitle: "Manchester City vs Brighton (FT 4:0)",
-                  },
-                  {
-                    matchId: "m_eve_cry",
-                    marketId: "1x2",
-                    marketName: "1X2 (Match Result)",
-                    optionId: "opt_home",
-                    optionLabel: "Home",
-                    multiplier: 2.26,
-                    matchTitle: "Everton vs Crystal Palace (FT 2:1)",
-                  },
-                ],
-              })
-            }
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border border-yellow-500/40 text-yellow-400 hover:text-yellow-300 hover:border-yellow-400 text-xs font-black shadow-[0_0_12px_rgba(255,215,0,0.15)] active:scale-95 transition-all cursor-pointer"
-            title="Preview Glowing Winning Cup"
-          >
-            <Trophy className="h-3.5 w-3.5 text-yellow-400" />
-            <span>Winning Cup 🏆</span>
           </button>
 
           {/* Right: Deposited betting balance in gold/yellow */}
@@ -1101,7 +926,7 @@ function HistoryPage() {
                 type="button"
                 onClick={() => {
                   setHistoryStatusFilter("Settled");
-                  setHistoryResultFilter("All");
+                  setHistoryResultFilter("Won");
                   setHistoryDateFilter("");
                   toast.info("Filters reset to default.");
                 }}
@@ -1114,19 +939,24 @@ function HistoryPage() {
 
             {/* Empty state */}
             {filteredSettledBets.length === 0 ? (
-              <div className="p-8 text-center rounded-xl border border-[#262f3e] bg-[#181d26]">
-                <p className="text-sm font-bold text-gray-300">No bets match your filters</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHistoryStatusFilter("Settled");
-                    setHistoryResultFilter("All");
-                    setHistoryDateFilter("");
-                  }}
-                  className="mt-2 text-xs font-bold text-[#00E676] hover:underline cursor-pointer"
-                >
-                  Reset all filters
-                </button>
+              <div className="p-8 text-center rounded-xl border border-[#222938] bg-[#141822] space-y-3">
+                <div className="h-12 w-12 rounded-full bg-[#172b20] border border-[#22c55e]/30 flex items-center justify-center mx-auto text-[#00E676]">
+                  <Trophy className="h-6 w-6 text-[#00E676]/70" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-200">No Won Tickets Yet</p>
+                  <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
+                    When your placed bets win, your won tickets will appear here with your payout returns and winning celebration trophy.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <Link
+                    to="/matches"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#00a859] hover:bg-[#00914c] text-white text-xs font-black transition-all active:scale-95 shadow-sm"
+                  >
+                    Browse Matches
+                  </Link>
+                </div>
               </div>
             ) : (
               /* Grouped Date Timeline Layout (Exact Match to User Screenshot) */
