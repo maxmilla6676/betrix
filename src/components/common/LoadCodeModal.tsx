@@ -19,12 +19,15 @@ export function LoadCodeModal({ open, onOpenChange }: LoadCodeModalProps) {
 
   const handleLoad = async (e: React.FormEvent) => {
     e.preventDefault();
-    let clean = code.trim().toUpperCase();
+    const clean = code.trim().toUpperCase();
     if (!clean) { setError("Please enter a booking code."); return; }
-    if (!clean.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(clean)) {
-      clean = `BTX-${clean}`;
+    let found = await fetchSlipByCode(clean);
+    if (!found && clean.startsWith("BTX-")) {
+      found = await fetchSlipByCode(clean.replace(/^BTX-/, ""));
+    } else if (!found && !clean.startsWith("BTX-")) {
+      found = await fetchSlipByCode(`BTX-${clean}`);
     }
-    const found = await fetchSlipByCode(clean);
+
     if (!found || found.selections.length === 0) {
       setError(`No booking found for ${clean}.`);
       return;
@@ -35,7 +38,7 @@ export function LoadCodeModal({ open, onOpenChange }: LoadCodeModalProps) {
     onOpenChange(false);
   };
 
-  const currentCode = slip.length > 0 ? makeCode() : "BTX-89F12";
+  const currentCode = slip.length > 0 ? makeCode() : "MNKWLL";
 
   const handleCopy = () => {
     navigator.clipboard.writeText(currentCode);
@@ -61,7 +64,7 @@ export function LoadCodeModal({ open, onOpenChange }: LoadCodeModalProps) {
             <Input
               value={code}
               onChange={(e) => { setCode(e.target.value); setError(""); }}
-              placeholder="e.g. BTX-78A9B"
+              placeholder="e.g. MNKWLL or BECD41"
               className="bg-gray-50 border-gray-200 text-gray-900 font-mono uppercase text-sm tracking-wider focus:border-[#E41B23] rounded-xl"
             />
             {error && <p className="text-xs text-[#E41B23] font-semibold">{error}</p>}

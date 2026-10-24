@@ -29,7 +29,7 @@ function generateBookingCode(length = 6) {
   for (let i = 0; i < length; i++) {
     res += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `BTX-${res}`;
+  return res;
 }
 
 function nowStr() {
@@ -356,34 +356,41 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
 
   const handleLoadBookingCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    let codeToSearch = bookingCode.trim().toUpperCase();
-    if (!codeToSearch) {
+    const clean = bookingCode.trim().toUpperCase();
+    if (!clean) {
       toast.error("Please enter a valid booking code");
       return;
-    }
-    if (!codeToSearch.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(codeToSearch)) {
-      codeToSearch = `BTX-${codeToSearch}`;
     }
     setLoadingCode(true);
     try {
       if (typeof loadCatalog === "function") {
         await loadCatalog().catch(() => null);
       }
-      const found =
-        history.find((h) => h.code.toUpperCase() === codeToSearch) || (await fetchSlipByCode(codeToSearch));
-      const open = (found?.selections || []).filter((s) => !isMatchLocked(getMatch(s.matchId)));
+      let found =
+        history.find((h) => h.code.toUpperCase() === clean) || (await fetchSlipByCode(clean));
+      if (!found && clean.startsWith("BTX-")) {
+        const withoutPrefix = clean.replace(/^BTX-/, "");
+        found = history.find((h) => h.code.toUpperCase() === withoutPrefix) || (await fetchSlipByCode(withoutPrefix));
+      } else if (!found && !clean.startsWith("BTX-")) {
+        const withPrefix = `BTX-${clean}`;
+        found = history.find((h) => h.code.toUpperCase() === withPrefix) || (await fetchSlipByCode(withPrefix));
+      }
+
       if (!found || found.selections.length === 0) {
-        toast.error(`Booking code ${codeToSearch} not found`);
-      } else if (open.length === 0) {
-        toast.error(`All matches in ${codeToSearch} have already started.`);
+        toast.error(`Booking code ${clean} not found`);
       } else {
-        loadSlip(open);
-        toast.success(
-          open.length < found.selections.length
-            ? `Loaded ${open.length} of ${found.selections.length} selections (started matches skipped).`
-            : `Booking code ${codeToSearch} loaded with ${open.length} selections!`,
-        );
-        setBookingCode("");
+        const open = (found.selections || []).filter((s) => !isMatchLocked(getMatch(s.matchId)));
+        if (open.length === 0) {
+          toast.error(`All matches in ${clean} have already started.`);
+        } else {
+          loadSlip(open);
+          toast.success(
+            open.length < found.selections.length
+              ? `Loaded ${open.length} of ${found.selections.length} selections (started matches skipped).`
+              : `Booking code ${found.code} loaded with ${open.length} selections!`,
+          );
+          setBookingCode("");
+        }
       }
     } finally {
       setLoadingCode(false);
@@ -517,9 +524,9 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
         >
           <input
             type="text"
-            placeholder="Load Booking Code..."
+            placeholder="Load Booking Code (e.g. MNKWLL)..."
             value={bookingCode}
-            onChange={(e) => setBookingCode(e.target.value)}
+            onChange={(e) => setBookingCode(e.target.value.toUpperCase())}
             className="flex-1 bg-[#0b0e14] border border-[#262936] rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#F5C400] font-mono tracking-wider"
           />
           <button

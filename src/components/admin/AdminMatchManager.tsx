@@ -803,7 +803,7 @@ function makeRandomBookingCode() {
   for (let i = 0; i < 6; i++) {
     out += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `BTX-${out}`;
+  return out;
 }
 
 export interface DerivedCodeItem {

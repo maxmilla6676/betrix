@@ -28,7 +28,7 @@ function makeCode() {
   const bytes = crypto.randomBytes(6);
   let out = "";
   for (const b of bytes) out += chars[b % chars.length];
-  return `BTX-${out}`;
+  return out;
 }
 
 export async function placeBet(user: AuthedUser, body: Record<string, unknown>) {

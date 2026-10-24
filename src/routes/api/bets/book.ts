@@ -8,7 +8,7 @@ function makeBookingCode() {
   const bytes = crypto.randomBytes(6);
   let out = "";
   for (const b of bytes) out += chars[b % chars.length];
-  return `BTX-${out}`;
+  return out;
 }
 
 export const Route = createFileRoute("/api/bets/book")({
@@ -21,7 +21,7 @@ export const Route = createFileRoute("/api/bets/book")({
       POST: handle(async ({ request }) => {
         const body = (await readJson(request)) as Record<string, unknown>;
         const rawCode = typeof body["code"] === "string" ? body["code"].trim().toUpperCase() : "";
-        const code = rawCode && /^BTX-[A-Z0-9]{4,12}$/.test(rawCode) ? rawCode : makeBookingCode();
+        const code = rawCode && /^(BTX-)?[A-Z0-9]{4,12}$/.test(rawCode) ? rawCode : makeBookingCode();
 
         const selections = Array.isArray(body["selections"]) ? body["selections"] : [];
         if (selections.length === 0) {

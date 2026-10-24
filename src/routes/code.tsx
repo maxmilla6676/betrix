@@ -26,18 +26,35 @@ function CodePage() {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [remote, setRemote] = useState<HistoryEntry | null>(null);
-  const rawClean = code.trim().toUpperCase();
-  const clean = !rawClean.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(rawClean) ? `BTX-${rawClean}` : rawClean;
-  const local = history.find((h) => h.code.toUpperCase() === clean);
-  const found = local || (remote?.code === clean ? remote : undefined);
+  const clean = code.trim().toUpperCase();
+  const local =
+    history.find((h) => h.code.toUpperCase() === clean) ||
+    (clean.startsWith("BTX-")
+      ? history.find((h) => h.code.toUpperCase() === clean.replace(/^BTX-/, ""))
+      : history.find((h) => h.code.toUpperCase() === `BTX-${clean}`));
+
+  const found =
+    local ||
+    (remote &&
+    (remote.code.toUpperCase() === clean ||
+      remote.code.toUpperCase().replace(/^BTX-/, "") === clean ||
+      `BTX-${remote.code.toUpperCase()}` === clean)
+      ? remote
+      : undefined);
 
   // Codes shared by other players are looked up on the server.
   useEffect(() => {
-    if (local || !/^BTX-[A-Z0-9]{4,12}$/.test(clean)) return;
+    if (local || !/^(BTX-)?[A-Z0-9]{4,12}$/.test(clean)) return;
     let cancelled = false;
-    fetchSlipByCode(clean).then((r) => {
+    (async () => {
+      let r = await fetchSlipByCode(clean);
+      if (!r && clean.startsWith("BTX-")) {
+        r = await fetchSlipByCode(clean.replace(/^BTX-/, ""));
+      } else if (!r && !clean.startsWith("BTX-")) {
+        r = await fetchSlipByCode(`BTX-${clean}`);
+      }
       if (!cancelled) setRemote(r);
-    });
+    })();
     return () => {
       cancelled = true;
     };
@@ -45,13 +62,13 @@ function CodePage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4">
-      <SectionHeading title="Load prediction code" subtitle="Paste a BETRIX code to copy those selections into your slip." />
+      <SectionHeading title="Load prediction code" subtitle="Paste a booking code to copy those selections into your slip." />
 
       <div className="surface-card space-y-3 rounded-2xl p-4">
         <Input
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
-          placeholder="BTX-XXXXX"
+          placeholder="e.g. MNKWLL"
           aria-label="Prediction code"
           className="tabular h-12 text-center text-lg font-bold tracking-widest"
         />
