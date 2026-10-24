@@ -30,6 +30,7 @@ import { Route as LeaguesSlugRouteImport } from './routes/leagues.$slug'
 import { Route as MatchMatchIdRouteImport } from './routes/match.$matchId'
 import { Route as ApiAuthMigrateRouteImport } from './routes/api/auth/migrate'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
+import { Route as ApiBetsBookRouteImport } from './routes/api/bets/book'
 import { Route as ApiBetsPlaceRouteImport } from './routes/api/bets/place'
 import { Route as ApiBetsSettleRouteImport } from './routes/api/bets/settle'
 import { Route as ApiPartnersApplyRouteImport } from './routes/api/partners/apply'
@@ -144,6 +145,11 @@ const ApiAuthRegisterRoute = ApiAuthRegisterRouteImport.update({
   path: '/api/auth/register',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBetsBookRoute = ApiBetsBookRouteImport.update({
+  id: '/api/bets/book',
+  path: '/api/bets/book',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBetsPlaceRoute = ApiBetsPlaceRouteImport.update({
   id: '/api/bets/place',
   path: '/api/bets/place',
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/leagues/': typeof LeaguesIndexRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/book': typeof ApiBetsBookRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
   '/api/partners/apply': typeof ApiPartnersApplyRoute
@@ -238,6 +245,7 @@ export interface FileRoutesByTo {
   '/leagues': typeof LeaguesIndexRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/book': typeof ApiBetsBookRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
   '/api/partners/apply': typeof ApiPartnersApplyRoute
@@ -270,6 +278,7 @@ export interface FileRoutesById {
   '/leagues/': typeof LeaguesIndexRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
+  '/api/bets/book': typeof ApiBetsBookRoute
   '/api/bets/place': typeof ApiBetsPlaceRoute
   '/api/bets/settle': typeof ApiBetsSettleRoute
   '/api/partners/apply': typeof ApiPartnersApplyRoute
@@ -303,6 +312,7 @@ export interface FileRouteTypes {
     | '/leagues/'
     | '/api/auth/migrate'
     | '/api/auth/register'
+    | '/api/bets/book'
     | '/api/bets/place'
     | '/api/bets/settle'
     | '/api/partners/apply'
@@ -334,6 +344,7 @@ export interface FileRouteTypes {
     | '/leagues'
     | '/api/auth/migrate'
     | '/api/auth/register'
+    | '/api/bets/book'
     | '/api/bets/place'
     | '/api/bets/settle'
     | '/api/partners/apply'
@@ -365,6 +376,7 @@ export interface FileRouteTypes {
     | '/leagues/'
     | '/api/auth/migrate'
     | '/api/auth/register'
+    | '/api/bets/book'
     | '/api/bets/place'
     | '/api/bets/settle'
     | '/api/partners/apply'
@@ -397,6 +409,7 @@ export interface RootRouteChildren {
   LeaguesIndexRoute: typeof LeaguesIndexRoute
   ApiAuthMigrateRoute: typeof ApiAuthMigrateRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
+  ApiBetsBookRoute: typeof ApiBetsBookRoute
   ApiBetsPlaceRoute: typeof ApiBetsPlaceRoute
   ApiBetsSettleRoute: typeof ApiBetsSettleRoute
   ApiPartnersApplyRoute: typeof ApiPartnersApplyRoute
@@ -556,6 +569,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bets/book': {
+      id: '/api/bets/book'
+      path: '/api/bets/book'
+      fullPath: '/api/bets/book'
+      preLoaderRoute: typeof ApiBetsBookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bets/place': {
       id: '/api/bets/place'
       path: '/api/bets/place'
@@ -637,6 +657,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaguesIndexRoute: LeaguesIndexRoute,
   ApiAuthMigrateRoute: ApiAuthMigrateRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
+  ApiBetsBookRoute: ApiBetsBookRoute,
   ApiBetsPlaceRoute: ApiBetsPlaceRoute,
   ApiBetsSettleRoute: ApiBetsSettleRoute,
   ApiPartnersApplyRoute: ApiPartnersApplyRoute,

@@ -237,10 +237,109 @@ export async function fetchPublicSlipsFromBackend(limit = 10): Promise<HistoryEn
 }
 
 export async function fetchSlipByCode(code: string): Promise<HistoryEntry | null> {
-  const { data, error } = await supabase.rpc("slip_by_code", { p_code: code });
-  const row = Array.isArray(data) ? data[0] : null;
-  if (error || !row) return null;
-  return { ...slipFromRow(row), stake: 0, payout: 0, potWin: 0 };
+  const clean = code.trim().toUpperCase();
+  // 1. Try supabase RPC
+  try {
+    const { data, error } = await supabase.rpc("slip_by_code", { p_code: clean });
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!error && row && Array.isArray(row.selections) && row.selections.length > 0) {
+      return { ...slipFromRow(row), stake: 0, payout: 0, potWin: 0 };
+    }
+  } catch {
+    // Continue to server fallback
+  }
+
+  // 2. Server fallback endpoint
+  try {
+    const res = await fetch(`/api/bets/book?code=${encodeURIComponent(clean)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.selections) && data.selections.length > 0) {
+        return {
+          code: data.code,
+          stake: 0,
+          payout: 0,
+          potWin: 0,
+          status: "PENDING",
+          matchTitle: data.matchTitle || "Booked Selections",
+          selections: data.selections,
+          createdAt: data.createdAt || new Date().toISOString(),
+        };
+      }
+    }
+  } catch {
+    // Server fetch failed
+  }
+
+  return null;
+}
+
+/** Save a booking code to database (via API route + direct Supabase upsert). */
+export async function saveBookingCodeToBackend(params: {
+  code?: string;
+  selections: any[];
+  matchTitle?: string;
+  totalOdds?: number;
+}): Promise<{ success: boolean; code: string; error?: string }> {
+  try {
+    const res = await fetch("/api/bets/book", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return { success: true, code: data.code };
+    }
+    const errData = await res.json().catch(() => ({}));
+    return { success: false, code: params.code || "", error: errData.message || "Failed to save booking code" };
+  } catch (e: any) {
+    return { success: false, code: params.code || "", error: e?.message || "Network error saving booking code" };
+  }
+}
+
+/** Fetch community and admin booking codes from backend. */
+export async function fetchRecentBookingCodes(): Promise<
+  { code: string; matchTitle: string; totalOdds: number; selections: any[]; createdAt: string }[]
+> {
+  // 1. Try booking_codes table
+  try {
+    const { data } = await supabase.from("booking_codes").select("*").order("created_at", { ascending: false }).limit(20);
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((d) => ({
+        code: d.code,
+        matchTitle: d.match_title || "Derived Booking Code",
+        totalOdds: Number(d.total_odds || 1),
+        selections: Array.isArray(d.selections) ? d.selections : [],
+        createdAt: d.created_at,
+      }));
+    }
+  } catch {
+    // Table might not exist yet
+  }
+
+  // 2. Fallback to slips table with user_phone = 'SYSTEM_BOOKING'
+  try {
+    const { data } = await supabase
+      .from("slips")
+      .select("code, match_title, pot_win, selections, created_at")
+      .eq("user_phone", "SYSTEM_BOOKING")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (Array.isArray(data) && data.length > 0) {
+      return data.map((d) => ({
+        code: d.code,
+        matchTitle: d.match_title || "Derived Booking Code",
+        totalOdds: Number(d.pot_win || 1),
+        selections: Array.isArray(d.selections) ? d.selections : [],
+        createdAt: d.created_at,
+      }));
+    }
+  } catch {
+    // Slips query failed
+  }
+
+  return [];
 }
 
 export async function updatePartnerInBackend(

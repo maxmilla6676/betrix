@@ -14,12 +14,14 @@ import {
   MessageSquare,
   Send,
   Lock,
+  Wallet,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatGHS, useBetrix, type HistoryEntry, type Selection } from "@/store/betrix";
 import { matchById, teamById, isMatchLocked } from "@/data/football";
 import { cn } from "@/lib/utils";
-import { fetchSlipByCode } from "@/services/backendSync";
+import { fetchSlipByCode, saveBookingCodeToBackend } from "@/services/backendSync";
 
 function generateBookingCode(length = 6) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -27,7 +29,7 @@ function generateBookingCode(length = 6) {
   for (let i = 0; i < length; i++) {
     res += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return res;
+  return `BTX-${res}`;
 }
 
 function nowStr() {
@@ -313,6 +315,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
     allMatches,
     history,
     loadSlip,
+    loadCatalog,
   } = useBetrix();
 
   const getMatch = (id: string) => allMatches.find((m) => m.id === id) || matchById(id);
@@ -353,13 +356,19 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
 
   const handleLoadBookingCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    const codeToSearch = bookingCode.trim().toUpperCase();
+    let codeToSearch = bookingCode.trim().toUpperCase();
     if (!codeToSearch) {
       toast.error("Please enter a valid booking code");
       return;
     }
+    if (!codeToSearch.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(codeToSearch)) {
+      codeToSearch = `BTX-${codeToSearch}`;
+    }
     setLoadingCode(true);
     try {
+      if (typeof loadCatalog === "function") {
+        await loadCatalog().catch(() => null);
+      }
       const found =
         history.find((h) => h.code.toUpperCase() === codeToSearch) || (await fetchSlipByCode(codeToSearch));
       const open = (found?.selections || []).filter((s) => !isMatchLocked(getMatch(s.matchId)));
@@ -405,7 +414,7 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
     }
   };
 
-  const handleBookBet = () => {
+  const handleBookBet = async () => {
     if (slip.length === 0) {
       toast.error("Add selections to book a bet");
       return;
@@ -422,6 +431,12 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
       ref,
     };
     setBookData(data);
+    await saveBookingCodeToBackend({
+      code,
+      selections: [...slip],
+      matchTitle: (slip.length === 1 ? slip[0]?.matchTitle : `${slip.length} Selections Accumulator`) || "Prediction Slip",
+      totalOdds: totalMultiplier,
+    });
   };
 
   if (confirmed) {
@@ -671,25 +686,36 @@ export function SlipContent({ onDone }: { onDone?: () => void }) {
               </div>
             )}
 
-            {/* Calculations Row */}
-            <div className="space-y-1.5 text-xs font-semibold">
-              <div className="flex items-center justify-between text-gray-400">
+            {/* Calculations Row with Real Money Balance */}
+            <div className="space-y-1.5 text-xs font-semibold bg-[#16161c] rounded-xl p-3 border border-[#2b2e3e]/60">
+              <div className="flex items-center justify-between text-xs pb-1.5 border-b border-[#2b2e3e]/50">
+                <span className="text-gray-400 font-semibold flex items-center gap-1.5">
+                  <Wallet className="h-3.5 w-3.5 text-[#00A859]" /> Real Wallet Balance
+                </span>
+                <span className="font-mono font-black text-white text-xs">
+                  GHS {balance.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-gray-400 pt-0.5">
                 <span>Overall Multiplier</span>
-                <span className="font-bold text-white">{totalMultiplier.toFixed(2)}x</span>
+                <span className="font-bold text-[#F5C400] font-mono">{totalMultiplier.toFixed(2)}x</span>
               </div>
               <div className="flex items-center justify-between text-gray-400">
-                <span>Total Stake</span>
-                <span className="font-bold text-white">
+                <span>Stake (Deducted from Balance)</span>
+                <span className="font-bold text-white font-mono">
                   GHS {totalStake.toLocaleString()}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-sm pt-1 border-t border-[#1f1f28]">
-                <span className="font-bold text-gray-200 uppercase tracking-wide">
-                  Potential Payout
+              <div className="flex items-center justify-between text-sm pt-1.5 border-t border-[#2b2e3e]/70">
+                <span className="font-bold text-gray-200 uppercase tracking-wide flex items-center gap-1">
+                  <Sparkles className="h-3.5 w-3.5 text-[#F5C400]" /> Potential Win
                 </span>
-                <span className="font-black text-emerald-400 text-base">
+                <span className="font-black text-emerald-400 text-base font-mono">
                   GHS {totalPotential.toLocaleString()}
                 </span>
+              </div>
+              <div className="text-[10px] text-gray-500 pt-0.5 flex items-center justify-end">
+                <span>⚡ Auto-credited to wallet balance when match finishes</span>
               </div>
             </div>
 

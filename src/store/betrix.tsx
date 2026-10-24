@@ -198,6 +198,7 @@ interface BetrixState {
   // Admin match & league manager
   adminLeagues: AdminLeague[];
   adminMatches: AdminMatch[];
+  loadCatalog: () => Promise<void>;
   addAdminLeague: (l: AdminLeague) => Promise<void>;
   deleteAdminLeague: (id: string) => Promise<void>;
   addAdminMatch: (m: AdminMatch) => Promise<void>;
@@ -693,17 +694,22 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       if (am.status === "finished" || am.status === "cancelled") continue;
       const state = computeAdminMatchLiveState(am, now);
       if (state.isCompleted && state.status === "FINISHED") {
-        updateAdminMatch({
-          id: am.id,
-          status: "finished",
-          homeScore: state.homeScore,
-          awayScore: state.awayScore,
-        }).then(() => {
-          settleNow("all").catch(() => undefined);
-        });
+        if (isAdmin) {
+          updateAdminMatch({
+            id: am.id,
+            status: "finished",
+            homeScore: state.homeScore,
+            awayScore: state.awayScore,
+          }).then(() => {
+            settleNow("all").catch(() => undefined);
+          });
+        } else if (isLoggedIn) {
+          // Regular users: settle their finished slips automatically
+          settleNow("mine").catch(() => undefined);
+        }
       }
     }
-  }, [tick, adminMatches, updateAdminMatch, settleNow]);
+  }, [tick, adminMatches, updateAdminMatch, settleNow, isAdmin, isLoggedIn]);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -715,15 +721,17 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
           h.selections.some((s) => {
             const m = allMatches.find((match) => match.id === s.matchId);
             if (m && m.status === "FINISHED") return true;
+            const am = adminMatches.find((x) => x.id === s.matchId);
+            if (am && computeAdminMatchLiveState(am, Date.now()).isCompleted) return true;
             return s.kickoffTime && Date.now() - new Date(s.kickoffTime).getTime() > 2 * 60000;
           }),
       );
       if (due) settleNow().catch(() => undefined);
     };
     check();
-    const interval = setInterval(check, 10000);
+    const interval = setInterval(check, 4000);
     return () => clearInterval(interval);
-  }, [isLoggedIn, settleNow, allMatches]);
+  }, [isLoggedIn, settleNow, allMatches, adminMatches]);
 
   const markAllRead = useCallback(
     () => setNotifications((n) => n.map((x) => ({ ...x, read: true }))),
@@ -943,6 +951,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     fetchApiMatches,
     adminLeagues,
     adminMatches,
+    loadCatalog,
     addAdminLeague,
     deleteAdminLeague,
     addAdminMatch,

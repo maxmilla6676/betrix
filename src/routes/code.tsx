@@ -26,13 +26,14 @@ function CodePage() {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [remote, setRemote] = useState<HistoryEntry | null>(null);
-  const clean = code.trim().toUpperCase();
+  const rawClean = code.trim().toUpperCase();
+  const clean = !rawClean.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(rawClean) ? `BTX-${rawClean}` : rawClean;
   const local = history.find((h) => h.code.toUpperCase() === clean);
   const found = local || (remote?.code === clean ? remote : undefined);
 
   // Codes shared by other players are looked up on the server.
   useEffect(() => {
-    if (local || !/^BTX-[A-Z0-9]{5,6}$/.test(clean)) return;
+    if (local || !/^BTX-[A-Z0-9]{4,12}$/.test(clean)) return;
     let cancelled = false;
     fetchSlipByCode(clean).then((r) => {
       if (!cancelled) setRemote(r);
@@ -78,10 +79,11 @@ function CodePage() {
           <ul className="mt-2 space-y-1.5">
             {found.selections.map((s, i) => {
               const m = selectionMatch(s);
+              const matchName = s.matchTitle || (m ? `${teamById(m.homeId).short} vs ${teamById(m.awayId).short}` : "Match");
               return (
                 <li key={i} className="flex items-center justify-between gap-3 border-b border-border/50 pb-1.5 text-xs last:border-0">
                   <span className="min-w-0 truncate">
-                    {m ? `${teamById(m.homeId).short} vs ${teamById(m.awayId).short}` : "Match"} · {s.optionLabel}
+                    {matchName} · {s.optionLabel}
                   </span>
                   <span className="tabular shrink-0 font-semibold">{s.multiplier.toFixed(2)}</span>
                 </li>

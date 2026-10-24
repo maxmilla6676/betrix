@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Plus, Trash2, Trophy, Calendar, Clock, ChevronDown,
   Check, Globe, AlertCircle, Play, CheckCircle2, XCircle,
   Target, FastForward, Edit3, Sliders, Sparkles, Timer,
+  Ticket, Copy, Share2, ExternalLink, Layers, Flame, CheckSquare, Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,10 @@ import {
   type AdminMatchOutcome,
   computeAdminMatchLiveState,
   parseAdminMatchOutcome,
+  buildAdminMatch,
+  adminKickoffIso,
 } from "@/data/adminMatches";
+import { saveBookingCodeToBackend, fetchRecentBookingCodes } from "@/services/backendSync";
 
 function makeId() {
   return `adm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -793,25 +797,633 @@ function EditTargetModal({
   );
 }
 
+function makeRandomBookingCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++) {
+    out += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `BTX-${out}`;
+}
+
+export interface DerivedCodeItem {
+  code: string;
+  matchTitle: string;
+  totalOdds: number;
+  selections: any[];
+  createdAt: string;
+}
+
+function toAdminLeagues(list: SelectableLeague[]): AdminLeague[] {
+  return list.map((l) => ({
+    id: l.id,
+    name: l.name,
+    country: "International",
+    color: l.color,
+    logoUrl: l.logoUrl,
+    defaultOutcome: l.defaultOutcome,
+    defaultHomeScore: l.defaultHomeScore,
+    defaultAwayScore: l.defaultAwayScore,
+    createdAt: new Date().toISOString(),
+  }));
+}
+
+function DeriveCodeModal({
+  match,
+  availableLeagues,
+  onClose,
+  onUpdateKickoff,
+  onCodeDerived,
+}: {
+  match: AdminMatch;
+  availableLeagues: SelectableLeague[];
+  onClose: () => void;
+  onUpdateKickoff: (id: string, date: string, time: string) => void;
+  onCodeDerived: (item: DerivedCodeItem) => void;
+}) {
+  const { loadSlip } = useBetrix();
+  const parsed = parseAdminMatchOutcome(match);
+  const adminLeagues = useMemo(() => toAdminLeagues(availableLeagues), [availableLeagues]);
+  const { match: converted } = useMemo(
+    () => buildAdminMatch(match, adminLeagues),
+    [match, adminLeagues],
+  );
+
+  // Market option calculations based on target outcome
+  const winnerOptId = parsed.outcome; // "home" | "draw" | "away"
+  const csOptId = `cs-${parsed.targetHome}:${parsed.targetAway}`;
+  const ouOptId = parsed.targetHome + parsed.targetAway > 2.5 ? "o25" : "u25";
+  const bttsOptId = parsed.targetHome > 0 && parsed.targetAway > 0 ? "yes" : "no";
+  const dcOptId =
+    parsed.targetHome > parsed.targetAway ? "1x" : parsed.targetAway > parsed.targetHome ? "x2" : "12";
+
+  const market1x2 = converted.markets.find((m) => m.id === "1x2");
+  const opt1x2 = market1x2?.options.find((o) => o.id === winnerOptId);
+
+  const marketCs = converted.markets.find((m) => m.id === "cs");
+  const optCs = marketCs?.options.find((o) => o.id === csOptId);
+
+  const marketOu = converted.markets.find((m) => m.id === "ou");
+  const optOu = marketOu?.options.find((o) => o.id === ouOptId);
+
+  const marketBtts = converted.markets.find((m) => m.id === "btts");
+  const optBtts = marketBtts?.options.find((o) => o.id === bttsOptId);
+
+  const marketDc = converted.markets.find((m) => m.id === "dc");
+  const optDc = marketDc?.options.find((o) => o.id === dcOptId);
+
+  const [selectedMarket, setSelectedMarket] = useState<"1x2" | "cs" | "ou" | "btts" | "dc">("1x2");
+  const [deriving, setDeriving] = useState(false);
+  const [derivedCode, setDerivedCode] = useState<string | null>(null);
+  const [derivedOdds, setDerivedOdds] = useState<number>(opt1x2?.multiplier ?? 2.15);
+  const [derivedSelections, setDerivedSelections] = useState<any[]>([]);
+
+  // Check if kickoff is in the past or < 5 mins
+  const kickoffMs = new Date(adminKickoffIso(match)).getTime();
+  const isKickoffClose = isNaN(kickoffMs) || kickoffMs - Date.now() < 5 * 60 * 1000;
+
+  const currentSelection = useMemo(() => {
+    const title = `${match.homeTeam} vs ${match.awayTeam}`;
+    if (selectedMarket === "cs") {
+      return {
+        matchId: match.id,
+        marketId: "cs",
+        marketName: "Correct Score",
+        optionId: csOptId,
+        optionLabel: `Exact Score ${parsed.targetHome}:${parsed.targetAway}`,
+        multiplier: optCs?.multiplier ?? 9.0,
+        matchTitle: title,
+        kickoffTime: converted.kickoff,
+      };
+    }
+    if (selectedMarket === "ou") {
+      return {
+        matchId: match.id,
+        marketId: "ou",
+        marketName: "Over / Under 2.5",
+        optionId: ouOptId,
+        optionLabel: ouOptId === "o25" ? "Over 2.5 Goals" : "Under 2.5 Goals",
+        multiplier: optOu?.multiplier ?? 1.82,
+        matchTitle: title,
+        kickoffTime: converted.kickoff,
+      };
+    }
+    if (selectedMarket === "btts") {
+      return {
+        matchId: match.id,
+        marketId: "btts",
+        marketName: "Both Teams To Score",
+        optionId: bttsOptId,
+        optionLabel: bttsOptId === "yes" ? "Both Teams to Score - Yes" : "Both Teams to Score - No",
+        multiplier: optBtts?.multiplier ?? 1.7,
+        matchTitle: title,
+        kickoffTime: converted.kickoff,
+      };
+    }
+    if (selectedMarket === "dc") {
+      return {
+        matchId: match.id,
+        marketId: "dc",
+        marketName: "Double Chance",
+        optionId: dcOptId,
+        optionLabel: `Double Chance (${dcOptId.toUpperCase()})`,
+        multiplier: optDc?.multiplier ?? 1.3,
+        matchTitle: title,
+        kickoffTime: converted.kickoff,
+      };
+    }
+    // Default 1x2 Winner
+    return {
+      matchId: match.id,
+      marketId: "1x2",
+      marketName: "Match Result",
+      optionId: winnerOptId,
+      optionLabel:
+        winnerOptId === "home"
+          ? `${match.homeTeam} Win (1)`
+          : winnerOptId === "away"
+            ? `${match.awayTeam} Win (2)`
+            : "Draw (X)",
+      multiplier: opt1x2?.multiplier ?? 2.15,
+      matchTitle: title,
+      kickoffTime: converted.kickoff,
+    };
+  }, [
+    selectedMarket,
+    match,
+    converted.kickoff,
+    csOptId,
+    optCs,
+    ouOptId,
+    optOu,
+    bttsOptId,
+    optBtts,
+    dcOptId,
+    optDc,
+    winnerOptId,
+    opt1x2,
+    parsed,
+  ]);
+
+  const handleDerive = async () => {
+    setDeriving(true);
+    try {
+      const code = makeRandomBookingCode();
+      const selections = [currentSelection];
+      const matchTitle = `${match.homeTeam} vs ${match.awayTeam}`;
+      const totalOdds = currentSelection.multiplier;
+
+      const res = await saveBookingCodeToBackend({
+        code,
+        selections,
+        matchTitle,
+        totalOdds,
+      });
+
+      if (!res.success) {
+        toast.error(`Could not save code: ${res.error || "unknown error"}`);
+        return;
+      }
+
+      setDerivedCode(code);
+      setDerivedOdds(totalOdds);
+      setDerivedSelections(selections);
+
+      onCodeDerived({
+        code,
+        matchTitle,
+        totalOdds,
+        selections,
+        createdAt: new Date().toISOString(),
+      });
+
+      navigator.clipboard.writeText(code).catch(() => null);
+      toast.success(`Booking code ${code} derived & saved to database! Copied to clipboard.`);
+    } finally {
+      setDeriving(false);
+    }
+  };
+
+  const handleQuickExtendKickoff = (minutes: number) => {
+    const d = new Date(Date.now() + minutes * 60000);
+    const date = d.toISOString().slice(0, 10);
+    const hh = String(d.getUTCHours()).padStart(2, "0");
+    const mm = String(d.getUTCMinutes()).padStart(2, "0");
+    const time = `${hh}:${mm}`;
+    onUpdateKickoff(match.id, date, time);
+    toast.success(`Kickoff updated to ${date} ${time} GMT (+${minutes}m)! Betting is open.`);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-[#16161c] border-2 border-[#F5C400]/40 rounded-3xl p-5 max-w-lg w-full space-y-4 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-[#2a2a35] pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-xl bg-[#F5C400]/20 flex items-center justify-center text-[#F5C400]">
+              <Ticket className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                Derive Booking Code for Fixed Match
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                Generate a real booking code that players can load and stake with real deposited money.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-7 w-7 rounded-lg bg-[#1f1f28] text-gray-400 hover:text-white flex items-center justify-center text-xs"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Match Information */}
+        <div className="bg-[#121216] rounded-2xl p-3.5 border border-[#2a2a35] space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-extrabold text-white text-sm">
+              {match.homeTeam} vs {match.awayTeam}
+            </span>
+            <span className="font-mono text-[10px] text-gray-400">
+              {match.kickoffDate} at {match.kickoffTime} GMT
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap pt-1">
+            <span className="px-2 py-0.5 rounded-md bg-[#F5C400]/15 text-[#F5C400] text-[10px] font-black border border-[#F5C400]/30 flex items-center gap-1">
+              <Target className="h-3 w-3" /> Target Score: {parsed.targetHome} – {parsed.targetAway}
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+              Winner: {parsed.outcome === "home" ? "Home Win" : parsed.outcome === "away" ? "Away Win" : "Draw"}
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 text-[10px] font-bold border border-blue-500/30">
+              Pace: {parsed.durationMinutes}m duration
+            </span>
+          </div>
+        </div>
+
+        {/* Kickoff Alert if close or past */}
+        {isKickoffClose && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 space-y-2 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+              <Clock className="h-4 w-4" /> Kickoff is starting soon or in the past
+            </div>
+            <p className="text-[11px] text-amber-200/80">
+              Extend kickoff so users have time to enter the booking code and stake their real money before kickoff locks the match:
+            </p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleQuickExtendKickoff(15)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all"
+              >
+                +15 Mins
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickExtendKickoff(30)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all"
+              >
+                +30 Mins
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickExtendKickoff(60)}
+                className="px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500 hover:text-black transition-all"
+              >
+                +1 Hour
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Select Target Market to Derive into Code */}
+        {!derivedCode && (
+          <div className="space-y-2">
+            <label className="text-xs font-black text-gray-300 flex items-center justify-between">
+              <span>Select Winning Fixed Market for Booking Code:</span>
+              <span className="text-[10px] text-[#F5C400]">Guaranteed to win at FT</span>
+            </label>
+
+            <div className="grid grid-cols-1 gap-2">
+              {/* Option 1: 1X2 Winner */}
+              <button
+                type="button"
+                onClick={() => setSelectedMarket("1x2")}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all",
+                  selectedMarket === "1x2"
+                    ? "bg-[#F5C400]/15 border-[#F5C400] text-white"
+                    : "bg-[#121216] border-[#2a2a35] text-gray-300 hover:border-gray-500",
+                )}
+              >
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <span>🏆 Match Winner (1X2)</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-black">
+                      Recommended
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    {parsed.outcome === "home"
+                      ? `${match.homeTeam} to Win`
+                      : parsed.outcome === "away"
+                        ? `${match.awayTeam} to Win`
+                        : "Draw"}
+                  </p>
+                </div>
+                <span className="font-mono font-black text-sm text-[#F5C400]">
+                  {(opt1x2?.multiplier ?? 2.15).toFixed(2)}x
+                </span>
+              </button>
+
+              {/* Option 2: Correct Score */}
+              <button
+                type="button"
+                onClick={() => setSelectedMarket("cs")}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all",
+                  selectedMarket === "cs"
+                    ? "bg-[#F5C400]/15 border-[#F5C400] text-white"
+                    : "bg-[#121216] border-[#2a2a35] text-gray-300 hover:border-gray-500",
+                )}
+              >
+                <div>
+                  <div className="flex items-center gap-1.5 font-bold text-xs">
+                    <span>🎯 Exact Final Score (Correct Score)</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#F5C400]/20 text-[#F5C400] font-black">
+                      High Odds!
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Scripted to finish exactly {parsed.targetHome} : {parsed.targetAway}
+                  </p>
+                </div>
+                <span className="font-mono font-black text-sm text-[#F5C400]">
+                  {(optCs?.multiplier ?? 9.0).toFixed(2)}x
+                </span>
+              </button>
+
+              {/* Option 3: Over/Under 2.5 */}
+              <button
+                type="button"
+                onClick={() => setSelectedMarket("ou")}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all",
+                  selectedMarket === "ou"
+                    ? "bg-[#F5C400]/15 border-[#F5C400] text-white"
+                    : "bg-[#121216] border-[#2a2a35] text-gray-300 hover:border-gray-500",
+                )}
+              >
+                <div>
+                  <div className="font-bold text-xs">⚽ Over / Under 2.5 Goals</div>
+                  <p className="text-[10px] text-gray-400">
+                    {parsed.targetHome + parsed.targetAway > 2.5
+                      ? `Over 2.5 Goals (${parsed.targetHome + parsed.targetAway} total goals)`
+                      : `Under 2.5 Goals (${parsed.targetHome + parsed.targetAway} total goals)`}
+                  </p>
+                </div>
+                <span className="font-mono font-black text-sm text-[#F5C400]">
+                  {(optOu?.multiplier ?? 1.82).toFixed(2)}x
+                </span>
+              </button>
+
+              {/* Option 4: Both Teams to Score */}
+              <button
+                type="button"
+                onClick={() => setSelectedMarket("btts")}
+                className={cn(
+                  "p-3 rounded-xl border text-left flex items-center justify-between transition-all",
+                  selectedMarket === "btts"
+                    ? "bg-[#F5C400]/15 border-[#F5C400] text-white"
+                    : "bg-[#121216] border-[#2a2a35] text-gray-300 hover:border-gray-500",
+                )}
+              >
+                <div>
+                  <div className="font-bold text-xs">🥅 Both Teams to Score (BTTS)</div>
+                  <p className="text-[10px] text-gray-400">
+                    {parsed.targetHome > 0 && parsed.targetAway > 0
+                      ? "Both Teams to Score — Yes"
+                      : "Both Teams to Score — No"}
+                  </p>
+                </div>
+                <span className="font-mono font-black text-sm text-[#F5C400]">
+                  {(optBtts?.multiplier ?? 1.7).toFixed(2)}x
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Derived Result View */}
+        {derivedCode && (
+          <div className="bg-[#121216] rounded-2xl border-2 border-emerald-500/50 p-4 space-y-3.5 text-center">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-xs font-black">
+              <CheckCircle2 className="h-4 w-4" /> Booking Code Derived & Active!
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                Derived BETRIX Booking Code
+              </p>
+              <div className="flex items-center justify-center gap-2">
+                <span className="font-mono text-3xl font-black text-[#F5C400] tracking-wider selection:bg-white selection:text-black">
+                  {derivedCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(derivedCode);
+                    toast.success(`Booking code ${derivedCode} copied!`);
+                  }}
+                  className="h-8 px-2.5 rounded-lg bg-[#F5C400] text-black font-bold text-xs flex items-center gap-1 hover:brightness-110"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Total Multiplier: <strong className="text-[#F5C400]">{derivedOdds.toFixed(2)}x</strong>
+              </p>
+            </div>
+
+            <div className="p-3 bg-[#1e1e26] rounded-xl border border-[#2a2a35] text-left text-xs space-y-1">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                What players will see:
+              </p>
+              <div className="flex items-center justify-between text-white font-bold">
+                <span>{match.homeTeam} vs {match.awayTeam}</span>
+                <span className="text-[#F5C400]">{derivedOdds.toFixed(2)}x</span>
+              </div>
+              <p className="text-gray-400 text-[11px]">
+                Selection: {currentSelection.optionLabel} ({currentSelection.marketName})
+              </p>
+            </div>
+
+            {/* Test Action: Load directly into Slip */}
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  loadSlip(derivedSelections);
+                  toast.success(`Code ${derivedCode} loaded into your betslip!`);
+                  onClose();
+                }}
+                className="h-9 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <ExternalLink className="h-3.5 w-3.5" /> Load into Betslip
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const shareText = `Check out this BETRIX fixed game booking code: ${derivedCode} (${match.homeTeam} vs ${match.awayTeam}) @ ${derivedOdds.toFixed(2)} odds! Load on BETRIX to stake and win!`;
+                  navigator.clipboard.writeText(shareText);
+                  toast.success("Share message copied to clipboard!");
+                }}
+                className="h-9 px-3 rounded-xl bg-[#2a2a35] hover:bg-[#343442] text-gray-200 font-bold text-xs flex items-center justify-center gap-1.5"
+              >
+                <Share2 className="h-3.5 w-3.5" /> Copy Share Link
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Action Button */}
+        {!derivedCode && (
+          <Button
+            type="button"
+            disabled={deriving}
+            onClick={handleDerive}
+            className="w-full h-11 bg-gradient-to-r from-[#F5C400] to-amber-500 hover:from-[#e0b300] hover:to-amber-600 text-black font-black text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2"
+          >
+            <Ticket className="h-4 w-4" />
+            {deriving ? "Deriving & Saving Code…" : `Derive Booking Code (${currentSelection.multiplier.toFixed(2)}x Odds)`}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MatchList({
   matches,
   availableLeagues,
   onDelete,
   onUpdate,
+  onCodeDerived,
 }: {
   matches: AdminMatch[];
   availableLeagues: SelectableLeague[];
   onDelete: (id: string) => void;
   onUpdate: (m: Partial<AdminMatch> & { id: string }) => void;
+  onCodeDerived: (item: DerivedCodeItem) => void;
 }) {
+  const { loadSlip } = useBetrix();
   const leagueMap = Object.fromEntries(availableLeagues.map((l) => [l.id, l]));
   const [finishingId, setFinishingId] = useState<string | null>(null);
   const [editingTargetId, setEditingTargetId] = useState<string | null>(null);
+  const [derivingMatch, setDerivingMatch] = useState<AdminMatch | null>(null);
+
+  // Multi-match accumulator selection
+  const [selectedAccIds, setSelectedAccIds] = useState<Set<string>>(new Set());
+  const [isDerivingAcc, setIsDerivingAcc] = useState(false);
+
+  const toggleSelectAcc = (id: string) => {
+    setSelectedAccIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const sorted = [...matches].sort((a, b) =>
     new Date(`${a.kickoffDate}T${a.kickoffTime}:00.000Z`).getTime() -
     new Date(`${b.kickoffDate}T${b.kickoffTime}:00.000Z`).getTime()
   );
+
+  const selectedMatches = useMemo(() => {
+    return sorted.filter((m) => selectedAccIds.has(m.id));
+  }, [sorted, selectedAccIds]);
+
+  const adminLeagues = useMemo(() => toAdminLeagues(availableLeagues), [availableLeagues]);
+
+  const accOdds = useMemo(() => {
+    if (selectedMatches.length === 0) return 1;
+    return selectedMatches.reduce((acc, m) => {
+      const { match: converted } = buildAdminMatch(m, adminLeagues);
+      const parsed = parseAdminMatchOutcome(m);
+      const m1x2 = converted.markets.find((x) => x.id === "1x2");
+      const opt = m1x2?.options.find((o) => o.id === parsed.outcome);
+      return acc * (opt?.multiplier ?? 2.15);
+    }, 1);
+  }, [selectedMatches, adminLeagues]);
+
+  const handleDeriveAcc = async () => {
+    if (selectedMatches.length < 2) {
+      toast.error("Please select at least 2 matches for an accumulator.");
+      return;
+    }
+    setIsDerivingAcc(true);
+    try {
+      const code = makeRandomBookingCode();
+      const selections = selectedMatches.map((m) => {
+        const { match: converted } = buildAdminMatch(m, adminLeagues);
+        const parsed = parseAdminMatchOutcome(m);
+        const m1x2 = converted.markets.find((x) => x.id === "1x2");
+        const opt = m1x2?.options.find((o) => o.id === parsed.outcome);
+        const title = `${m.homeTeam} vs ${m.awayTeam}`;
+        return {
+          matchId: m.id,
+          marketId: "1x2",
+          marketName: "Match Result",
+          optionId: parsed.outcome,
+          optionLabel:
+            parsed.outcome === "home"
+              ? `${m.homeTeam} (1)`
+              : parsed.outcome === "away"
+                ? `${m.awayTeam} (2)`
+                : "Draw (X)",
+          multiplier: opt?.multiplier ?? 2.15,
+          matchTitle: title,
+          kickoffTime: converted.kickoff,
+        };
+      });
+
+      const matchTitle = `${selectedMatches.length} Fixed Matches Accumulator`;
+      const totalOdds = Number(accOdds.toFixed(2));
+
+      const res = await saveBookingCodeToBackend({
+        code,
+        selections,
+        matchTitle,
+        totalOdds,
+      });
+
+      if (!res.success) {
+        toast.error(`Failed to save accumulator code: ${res.error || "unknown"}`);
+        return;
+      }
+
+      const item: DerivedCodeItem = {
+        code,
+        matchTitle,
+        totalOdds,
+        selections,
+        createdAt: new Date().toISOString(),
+      };
+      onCodeDerived(item);
+
+      navigator.clipboard.writeText(code).catch(() => null);
+      toast.success(
+        `🎉 Accumulator code ${code} (${selectedMatches.length} Folds, ${totalOdds}x Odds) derived & copied!`,
+      );
+      setSelectedAccIds(new Set());
+    } finally {
+      setIsDerivingAcc(false);
+    }
+  };
 
   if (sorted.length === 0) {
     return (
@@ -825,235 +1437,428 @@ function MatchList({
   const now = Date.now();
 
   return (
-    <div className="space-y-2.5">
-      {sorted.map((m) => {
-        const league = leagueMap[m.leagueId];
-        const state = computeAdminMatchLiveState(m, now);
-        const parsed = parseAdminMatchOutcome(m);
-        const hasScore = typeof m.homeScore === "number" && typeof m.awayScore === "number";
+    <div className="space-y-3">
+      {/* Multi-Match Accumulator Floating Bar */}
+      {selectedAccIds.size >= 2 && (
+        <div className="bg-gradient-to-r from-[#181822] via-[#242013] to-[#181822] border-2 border-[#F5C400] rounded-2xl p-3.5 flex items-center justify-between shadow-xl">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-xl bg-[#F5C400] text-black flex items-center justify-center font-black">
+              <Flame className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-white flex items-center gap-2">
+                {selectedAccIds.size} Fixed Matches Selected for Accumulator
+              </p>
+              <p className="text-[11px] text-gray-400">
+                Combined Target Odds:{" "}
+                <strong className="text-[#F5C400] font-mono font-black">{accOdds.toFixed(2)}x</strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedAccIds(new Set())}
+              className="text-[11px] text-gray-400 hover:text-white px-2 py-1 font-bold"
+            >
+              Deselect All
+            </button>
+            <Button
+              type="button"
+              disabled={isDerivingAcc}
+              onClick={handleDeriveAcc}
+              className="bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-xs h-8.5 px-3.5 shadow-md flex items-center gap-1.5"
+            >
+              <Ticket className="h-3.5 w-3.5" />
+              {isDerivingAcc ? "Deriving…" : `Derive ${selectedAccIds.size}-Fold Booking Code`}
+            </Button>
+          </div>
+        </div>
+      )}
 
-        const winnerLabel =
-          parsed.outcome === "home"
-            ? "Home Win"
-            : parsed.outcome === "away"
-              ? "Away Win"
-              : "Draw";
+      {/* Match Cards List */}
+      <div className="space-y-2.5">
+        {sorted.map((m) => {
+          const league = leagueMap[m.leagueId];
+          const state = computeAdminMatchLiveState(m, now);
+          const parsed = parseAdminMatchOutcome(m);
+          const hasScore = typeof m.homeScore === "number" && typeof m.awayScore === "number";
 
-        return (
-          <div
-            key={m.id}
-            className="bg-[#1e1e26] rounded-xl border border-[#2a2a35] p-3.5 flex items-start gap-3 hover:border-[#F5C400]/30 transition-colors shadow-sm"
-          >
+          const winnerLabel =
+            parsed.outcome === "home"
+              ? "Home Win"
+              : parsed.outcome === "away"
+                ? "Away Win"
+                : "Draw";
+
+          const isSelectedForAcc = selectedAccIds.has(m.id);
+
+          return (
             <div
-              className="w-1.5 self-stretch rounded-full shrink-0"
-              style={{ backgroundColor: league?.color ?? "#E41B23" }}
-            />
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center gap-2 text-[10px] text-gray-400 font-semibold flex-wrap">
-                {league?.logoUrl ? (
-                  <img src={league.logoUrl} className="h-3.5 w-3.5 rounded-full object-cover" alt="" />
-                ) : (
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: league?.color ?? "#E41B23" }} />
-                )}
-                <span className="font-bold text-gray-300">{league?.name ?? "Custom League"}</span>
-                <span>•</span>
-                <span className="text-gray-300">
-                  {m.kickoffDate} at {m.kickoffTime} GMT
-                </span>
-                <span>•</span>
-                {/* Target Outcome Badge */}
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F5C400]/15 border border-[#F5C400]/30 text-[#F5C400] font-black text-[10px]">
-                  <Target className="h-3 w-3" /> Target: {parsed.targetHome} – {parsed.targetAway} ({winnerLabel})
-                  {parsed.durationMinutes !== 90 && (
-                    <span className="text-[9px] opacity-75">[{parsed.durationMinutes}m]</span>
-                  )}
-                </span>
-              </div>
-
-              {/* Match Teams & Live/FT Score */}
-              <div className="flex items-center gap-2 text-sm font-black text-white">
-                {m.homeLogoUrl ? (
-                  <img src={m.homeLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
-                ) : null}
-                <span className="truncate">{m.homeTeam}</span>
-                <span className={cn(
-                  "px-2 py-0.5 rounded-md text-xs font-black",
-                  state.status === "LIVE"
-                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                    : state.status === "FINISHED"
-                      ? "bg-white/10 text-white"
-                      : "text-gray-500"
-                )}>
-                  {state.status === "LIVE" || state.status === "FINISHED" || hasScore
-                    ? `${state.homeScore ?? m.homeScore ?? 0} – ${state.awayScore ?? m.awayScore ?? 0}`
-                    : "vs"}
-                </span>
-                {m.awayLogoUrl ? (
-                  <img src={m.awayLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
-                ) : null}
-                <span className="truncate">{m.awayTeam}</span>
-              </div>
-
-              {/* Status and Progress */}
-              <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <span
-                  className={cn(
-                    "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
-                    state.status === "FINISHED" || m.status === "finished"
-                      ? "bg-gray-700/50 text-gray-300 border border-gray-600/30"
-                      : m.status === "cancelled"
-                        ? "bg-red-500/15 text-red-400 border border-red-500/30"
-                        : state.status === "LIVE" || m.status === "live"
-                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse font-black"
-                          : "bg-blue-500/15 text-blue-400 border border-blue-500/30"
-                  )}
+              key={m.id}
+              className={cn(
+                "bg-[#1e1e26] rounded-xl border p-3.5 flex items-start gap-3 transition-colors shadow-sm",
+                isSelectedForAcc ? "border-[#F5C400] bg-[#1e1e26]/90" : "border-[#2a2a35] hover:border-[#F5C400]/30",
+              )}
+            >
+              {/* Checkbox for Multi-Match Accumulator */}
+              {m.status !== "finished" && m.status !== "cancelled" && (
+                <button
+                  type="button"
+                  onClick={() => toggleSelectAcc(m.id)}
+                  title={isSelectedForAcc ? "Deselect for accumulator" : "Select for multi-match accumulator code"}
+                  className="mt-1 text-gray-500 hover:text-[#F5C400] transition-colors shrink-0"
                 >
-                  {(state.status === "FINISHED" || m.status === "finished") && (
-                    <><CheckCircle2 className="h-3 w-3 text-emerald-400" /> Finished FT</>
+                  {isSelectedForAcc ? (
+                    <CheckSquare className="h-4 w-4 text-[#F5C400]" />
+                  ) : (
+                    <Square className="h-4 w-4" />
                   )}
-                  {m.status === "cancelled" && (<><XCircle className="h-3 w-3" /> Cancelled — bets void</>)}
-                  {(state.status === "LIVE" || m.status === "live") && (
-                    <><Play className="h-3 w-3" /> LIVE {state.minute}&apos; (Playing towards {parsed.targetHome}–{parsed.targetAway})</>
-                  )}
-                  {state.status === "SCHEDULED" && m.status === "scheduled" && (
-                    <><Clock className="h-3 w-3" /> Scheduled (Betting Open)</>
-                  )}
-                </span>
+                </button>
+              )}
 
-                {/* Progress bar for live matches */}
-                {state.status === "LIVE" && state.minute && (
-                  <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
-                    <div className="w-20 bg-[#121216] rounded-full h-1.5 overflow-hidden border border-[#2a2a35]">
-                      <div
-                        className="bg-emerald-500 h-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, (state.minute / 90) * 100)}%` }}
-                      />
+              <div
+                className="w-1.5 self-stretch rounded-full shrink-0"
+                style={{ backgroundColor: league?.color ?? "#E41B23" }}
+              />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center gap-2 text-[10px] text-gray-400 font-semibold flex-wrap">
+                  {league?.logoUrl ? (
+                    <img src={league.logoUrl} className="h-3.5 w-3.5 rounded-full object-cover" alt="" />
+                  ) : (
+                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: league?.color ?? "#E41B23" }} />
+                  )}
+                  <span className="font-bold text-gray-300">{league?.name ?? "Custom League"}</span>
+                  <span>•</span>
+                  <span className="text-gray-300">
+                    {m.kickoffDate} at {m.kickoffTime} GMT
+                  </span>
+                  <span>•</span>
+                  {/* Target Outcome Badge */}
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#F5C400]/15 border border-[#F5C400]/30 text-[#F5C400] font-black text-[10px]">
+                    <Target className="h-3 w-3" /> Target: {parsed.targetHome} – {parsed.targetAway} ({winnerLabel})
+                    {parsed.durationMinutes !== 90 && (
+                      <span className="text-[9px] opacity-75">[{parsed.durationMinutes}m pace]</span>
+                    )}
+                  </span>
+                </div>
+
+                {/* Match Teams & Live/FT Score */}
+                <div className="flex items-center gap-2 text-sm font-black text-white">
+                  {m.homeLogoUrl ? (
+                    <img src={m.homeLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
+                  ) : null}
+                  <span className="truncate">{m.homeTeam}</span>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-md text-xs font-black",
+                      state.status === "LIVE"
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                        : state.status === "FINISHED"
+                          ? "bg-white/10 text-white"
+                          : "text-gray-500",
+                    )}
+                  >
+                    {state.status === "LIVE" || state.status === "FINISHED" || hasScore
+                      ? `${state.homeScore ?? m.homeScore ?? 0} – ${state.awayScore ?? m.awayScore ?? 0}`
+                      : "vs"}
+                  </span>
+                  {m.awayLogoUrl ? (
+                    <img src={m.awayLogoUrl} className="h-5 w-5 rounded-full object-cover bg-white/10" alt="" />
+                  ) : null}
+                  <span className="truncate">{m.awayTeam}</span>
+                </div>
+
+                {/* Status and Progress */}
+                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                  <span
+                    className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1",
+                      state.status === "FINISHED" || m.status === "finished"
+                        ? "bg-gray-700/50 text-gray-300 border border-gray-600/30"
+                        : m.status === "cancelled"
+                          ? "bg-red-500/15 text-red-400 border border-red-500/30"
+                          : state.status === "LIVE" || m.status === "live"
+                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse font-black"
+                            : "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+                    )}
+                  >
+                    {(state.status === "FINISHED" || m.status === "finished") && (
+                      <><CheckCircle2 className="h-3 w-3 text-emerald-400" /> Finished FT</>
+                    )}
+                    {m.status === "cancelled" && <><XCircle className="h-3 w-3" /> Cancelled — bets void</>}
+                    {(state.status === "LIVE" || m.status === "live") && (
+                      <><Play className="h-3 w-3" /> LIVE {state.minute}&apos; (Playing towards {parsed.targetHome}–{parsed.targetAway})</>
+                    )}
+                    {state.status === "SCHEDULED" && m.status === "scheduled" && (
+                      <><Clock className="h-3 w-3" /> Scheduled (Betting Open)</>
+                    )}
+                  </span>
+
+                  {/* Progress bar for live matches */}
+                  {state.status === "LIVE" && state.minute && (
+                    <div className="flex items-center gap-1.5 text-[9px] text-gray-400">
+                      <div className="w-20 bg-[#121216] rounded-full h-1.5 overflow-hidden border border-[#2a2a35]">
+                        <div
+                          className="bg-emerald-500 h-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, (state.minute / 90) * 100)}%` }}
+                        />
+                      </div>
+                      <span>{state.minute}&apos;/90&apos;</span>
                     </div>
-                    <span>{state.minute}&apos;/90&apos;</span>
+                  )}
+                </div>
+
+                {/* Editing Target inline */}
+                {editingTargetId === m.id && (
+                  <EditTargetModal
+                    match={m}
+                    onSave={(patch) => {
+                      onUpdate({ id: m.id, ...patch });
+                      setEditingTargetId(null);
+                    }}
+                    onClose={() => setEditingTargetId(null)}
+                  />
+                )}
+
+                {/* Finish match manual score form */}
+                {finishingId === m.id && m.status !== "finished" && (
+                  <FinishMatchForm
+                    match={m}
+                    onFinish={(homeScore, awayScore) => {
+                      onUpdate({ id: m.id, status: "finished", homeScore, awayScore });
+                      setFinishingId(null);
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Quick Actions for Match */}
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <div className="flex items-center gap-1">
+                  {/* Derive Booking Code Button */}
+                  {m.status !== "finished" && m.status !== "cancelled" && (
+                    <button
+                      type="button"
+                      title="Derive booking code for this match"
+                      onClick={() => setDerivingMatch(m)}
+                      className="px-2.5 py-1.5 rounded-lg text-[10px] font-black bg-gradient-to-r from-[#F5C400] to-amber-500 text-black hover:brightness-110 transition-all flex items-center gap-1 shadow-md active:scale-95"
+                    >
+                      <Ticket className="h-3.5 w-3.5" /> Derive Code
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    title="Delete Match"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Delete "${m.homeTeam} vs ${m.awayTeam}"? Pending bets on it will be voided after 7 days.`,
+                        )
+                      ) {
+                        onDelete(m.id);
+                      }
+                    }}
+                    className="p-1.5 rounded-lg text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23] transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Kick Off Now Button (Starts match live immediately) */}
+                {m.status === "scheduled" && state.status === "SCHEDULED" && (
+                  <button
+                    type="button"
+                    title="Start live playback now"
+                    onClick={() => {
+                      const today = todayStr();
+                      const nowTime = currentTimeStr(0);
+                      onUpdate({
+                        id: m.id,
+                        status: "live",
+                        kickoffDate: today,
+                        kickoffTime: nowTime,
+                      });
+                      toast.success(
+                        `Match kicked off! Now playing live toward target ${parsed.targetHome}-${parsed.targetAway}.`,
+                      );
+                    }}
+                    className="px-2 py-1 rounded-md text-[10px] font-black bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1 shadow-sm"
+                  >
+                    <Play className="h-3 w-3" /> Kick off now
+                  </button>
+                )}
+
+                {/* Fast Forward / Finish with Target Outcome */}
+                {(state.status === "LIVE" || m.status === "live" || m.status === "scheduled") && (
+                  <button
+                    type="button"
+                    title="Instantly complete match with target outcome and settle bets"
+                    onClick={() => {
+                      if (
+                        confirm(
+                          `Finish "${m.homeTeam} vs ${m.awayTeam}" with target score ${parsed.targetHome} – ${parsed.targetAway}? Bets will settle on this result.`,
+                        )
+                      ) {
+                        onUpdate({
+                          id: m.id,
+                          status: "finished",
+                          homeScore: parsed.targetHome,
+                          awayScore: parsed.targetAway,
+                        });
+                      }
+                    }}
+                    className="px-2 py-1 rounded-md text-[10px] font-black bg-[#F5C400]/15 border border-[#F5C400]/40 text-[#F5C400] hover:bg-[#F5C400] hover:text-black transition-all flex items-center gap-1 shadow-sm"
+                  >
+                    <FastForward className="h-3 w-3" /> Finish Target ({parsed.targetHome}-{parsed.targetAway})
+                  </button>
+                )}
+
+                {/* Change Target button (only if not finished) */}
+                {m.status !== "finished" && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingTargetId(editingTargetId === m.id ? null : m.id)}
+                    className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors flex items-center gap-1"
+                  >
+                    <Target className="h-3 w-3" /> Target
+                  </button>
+                )}
+
+                {/* Finish manually or cancel */}
+                {(m.status === "scheduled" || m.status === "live") && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setFinishingId(finishingId === m.id ? null : m.id)}
+                      className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors"
+                    >
+                      Custom FT…
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            `Cancel "${m.homeTeam} vs ${m.awayTeam}"? All bets on it will be voided and refunded.`,
+                          )
+                        ) {
+                          onUpdate({ id: m.id, status: "cancelled" });
+                        }
+                      }}
+                      className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-red-400/80 hover:text-red-400 transition-colors"
+                    >
+                      Cancel
+                    </button>
                   </div>
                 )}
               </div>
+            </div>
+          );
+        })}
+      </div>
 
-              {/* Editing Target inline */}
-              {editingTargetId === m.id && (
-                <EditTargetModal
-                  match={m}
-                  onSave={(patch) => {
-                    onUpdate({ id: m.id, ...patch });
-                    setEditingTargetId(null);
-                  }}
-                  onClose={() => setEditingTargetId(null)}
-                />
-              )}
+      {/* Derive Code Modal */}
+      {derivingMatch && (
+        <DeriveCodeModal
+          match={derivingMatch}
+          availableLeagues={availableLeagues}
+          onClose={() => setDerivingMatch(null)}
+          onUpdateKickoff={(id, kickoffDate, kickoffTime) => {
+            onUpdate({ id, kickoffDate, kickoffTime });
+            setDerivingMatch((prev) => (prev ? { ...prev, kickoffDate, kickoffTime } : null));
+          }}
+          onCodeDerived={(item) => {
+            onCodeDerived(item);
+          }}
+        />
+      )}
+    </div>
+  );
+}
 
-              {/* Finish match manual score form */}
-              {finishingId === m.id && m.status !== "finished" && (
-                <FinishMatchForm
-                  match={m}
-                  onFinish={(homeScore, awayScore) => {
-                    onUpdate({ id: m.id, status: "finished", homeScore, awayScore });
-                    setFinishingId(null);
+function DerivedCodesList({
+  codes,
+  onLoadIntoSlip,
+}: {
+  codes: DerivedCodeItem[];
+  onLoadIntoSlip: (selections: any[], code: string) => void;
+}) {
+  if (codes.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500 text-xs bg-[#1e1e26] rounded-2xl border border-[#2a2a35] space-y-2">
+        <Ticket className="h-9 w-9 mx-auto opacity-20 text-[#F5C400]" />
+        <p className="font-bold text-gray-400">No Derived Booking Codes Yet</p>
+        <p className="text-[11px] text-gray-500 max-w-sm mx-auto">
+          Go to the &quot;Platform Matches&quot; tab and click &quot;Derive Code&quot; on any fixed game, or select multiple games to create an accumulator code!
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs text-gray-400 px-1">
+        <span>Active Derived Booking Codes ({codes.length})</span>
+        <span className="text-[11px] text-[#F5C400]">Users can load any of these codes immediately</span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {codes.map((c) => (
+          <div
+            key={c.code}
+            className="bg-[#1e1e26] border border-[#2a2a35] hover:border-[#F5C400]/40 rounded-2xl p-4 space-y-3 shadow-md transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xl font-black text-[#F5C400] tracking-wider selection:bg-white selection:text-black">
+                {c.code}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(c.code);
+                    toast.success(`Booking code ${c.code} copied!`);
                   }}
-                />
-              )}
+                  className="h-7 px-2.5 rounded-lg bg-[#F5C400] text-black font-bold text-xs flex items-center gap-1 hover:brightness-110"
+                >
+                  <Copy className="h-3 w-3" /> Copy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onLoadIntoSlip(c.selections, c.code)}
+                  className="h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1"
+                >
+                  <ExternalLink className="h-3 w-3" /> Load
+                </button>
+              </div>
             </div>
 
-            {/* Quick Actions for Match */}
-            <div className="flex flex-col items-end gap-1.5 shrink-0">
-              <button
-                type="button"
-                title="Delete Match"
-                onClick={() => {
-                  if (confirm(`Delete "${m.homeTeam} vs ${m.awayTeam}"? Pending bets on it will be voided after 7 days.`)) {
-                    onDelete(m.id);
-                  }
-                }}
-                className="p-1.5 rounded-lg text-[#E41B23]/70 hover:bg-[#E41B23]/10 hover:text-[#E41B23] transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center justify-between text-white font-bold">
+                <span className="truncate">{c.matchTitle}</span>
+                <span className="font-mono text-[#F5C400]">{c.totalOdds.toFixed(2)}x Odds</span>
+              </div>
+              <div className="space-y-0.5 text-[11px] text-gray-400">
+                {c.selections.slice(0, 3).map((s, idx) => (
+                  <p key={idx} className="truncate">
+                    • {s.matchTitle || "Match"}: <strong className="text-gray-200">{s.optionLabel}</strong> (@{s.multiplier}x)
+                  </p>
+                ))}
+                {c.selections.length > 3 && (
+                  <p className="text-[10px] text-gray-500">+{c.selections.length - 3} more legs</p>
+                )}
+              </div>
+            </div>
 
-              {/* Kick Off Now Button (Starts match live immediately) */}
-              {m.status === "scheduled" && state.status === "SCHEDULED" && (
-                <button
-                  type="button"
-                  title="Start live playback now"
-                  onClick={() => {
-                    const today = todayStr();
-                    const nowTime = currentTimeStr(0);
-                    onUpdate({
-                      id: m.id,
-                      status: "live",
-                      kickoffDate: today,
-                      kickoffTime: nowTime,
-                    });
-                    toast.success(`Match kicked off! Now playing live toward target ${parsed.targetHome}-${parsed.targetAway}.`);
-                  }}
-                  className="px-2 py-1 rounded-md text-[10px] font-black bg-emerald-600/20 border border-emerald-500/40 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all flex items-center gap-1 shadow-sm"
-                >
-                  <Play className="h-3 w-3" /> Kick off now
-                </button>
-              )}
-
-              {/* Fast Forward / Finish with Target Outcome */}
-              {(state.status === "LIVE" || m.status === "live" || m.status === "scheduled") && (
-                <button
-                  type="button"
-                  title="Instantly complete match with target outcome and settle bets"
-                  onClick={() => {
-                    if (confirm(`Finish "${m.homeTeam} vs ${m.awayTeam}" with target score ${parsed.targetHome} – ${parsed.targetAway}? Bets will settle on this result.`)) {
-                      onUpdate({
-                        id: m.id,
-                        status: "finished",
-                        homeScore: parsed.targetHome,
-                        awayScore: parsed.targetAway,
-                      });
-                    }
-                  }}
-                  className="px-2 py-1 rounded-md text-[10px] font-black bg-[#F5C400]/15 border border-[#F5C400]/40 text-[#F5C400] hover:bg-[#F5C400] hover:text-black transition-all flex items-center gap-1 shadow-sm"
-                >
-                  <FastForward className="h-3 w-3" /> Finish to Target ({parsed.targetHome}-{parsed.targetAway})
-                </button>
-              )}
-
-              {/* Change Target button (only if not finished) */}
-              {m.status !== "finished" && (
-                <button
-                  type="button"
-                  onClick={() => setEditingTargetId(editingTargetId === m.id ? null : m.id)}
-                  className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors flex items-center gap-1"
-                >
-                  <Target className="h-3 w-3" /> Target
-                </button>
-              )}
-
-              {/* Finish manually or cancel */}
-              {(m.status === "scheduled" || m.status === "live") && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setFinishingId(finishingId === m.id ? null : m.id)}
-                    className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-gray-400 hover:text-white transition-colors"
-                  >
-                    Custom FT…
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(`Cancel "${m.homeTeam} vs ${m.awayTeam}"? All bets on it will be voided and refunded.`)) {
-                        onUpdate({ id: m.id, status: "cancelled" });
-                      }
-                    }}
-                    className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#121216] border border-[#2a2a35] text-red-400/80 hover:text-red-400 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
+            <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1 border-t border-[#2a2a35]">
+              <span>Created: {new Date(c.createdAt).toLocaleTimeString()}</span>
+              <span className="text-emerald-400 font-semibold">● Ready for user stake</span>
             </div>
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1067,10 +1872,25 @@ export function AdminMatchManager() {
     deleteAdminMatch,
     updateAdminMatch,
     settleNow,
+    loadSlip,
   } = useBetrix();
 
-  const [view, setView] = useState<"matches" | "list" | "leagues">("matches");
+  const [view, setView] = useState<"matches" | "list" | "codes" | "leagues">("matches");
   const [settling, setSettling] = useState(false);
+  const [derivedCodes, setDerivedCodes] = useState<DerivedCodeItem[]>([]);
+
+  // Load recent derived booking codes from backend
+  useEffect(() => {
+    fetchRecentBookingCodes().then((list) => {
+      if (Array.isArray(list) && list.length > 0) {
+        setDerivedCodes(list);
+      }
+    });
+  }, []);
+
+  const handleCodeDerived = (item: DerivedCodeItem) => {
+    setDerivedCodes((prev) => [item, ...prev.filter((p) => p.code !== item.code)]);
+  };
 
   // Combined list of custom admin leagues + standard sports leagues
   const availableLeagues: SelectableLeague[] = useMemo(() => {
@@ -1119,24 +1939,35 @@ export function AdminMatchManager() {
     }
   };
 
+  const handleLoadDerivedCodeIntoSlip = (selections: any[], code: string) => {
+    loadSlip(selections);
+    toast.success(`Loaded ${selections.length} selections from code ${code} into your betslip!`);
+  };
+
   return (
     <div className="space-y-4">
       {/* Tab bar */}
       <div className="flex items-center gap-2 flex-wrap">
-        {(["matches", "list", "leagues"] as const).map((tab) => (
+        {(["matches", "list", "codes", "leagues"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
             onClick={() => setView(tab)}
             className={cn(
-              "px-4 py-1.5 rounded-full text-xs font-black transition-all border",
+              "px-4 py-1.5 rounded-full text-xs font-black transition-all border flex items-center gap-1.5",
               view === tab
                 ? "bg-[#E41B23] text-white border-[#E41B23] shadow-sm"
-                : "bg-[#1e1e26] text-gray-400 border-[#2a2a35] hover:text-white hover:border-[#F5C400]/30"
+                : "bg-[#1e1e26] text-gray-400 border-[#2a2a35] hover:text-white hover:border-[#F5C400]/30",
             )}
           >
             {tab === "matches" && "Add Match"}
             {tab === "list" && `Platform Matches (${adminMatches.length})`}
+            {tab === "codes" && (
+              <>
+                <Ticket className="h-3.5 w-3.5 text-[#F5C400]" />
+                Derived Codes {derivedCodes.length > 0 && `(${derivedCodes.length})`}
+              </>
+            )}
             {tab === "leagues" && `Custom Leagues (${adminLeagues.length})`}
           </button>
         ))}
@@ -1171,7 +2002,12 @@ export function AdminMatchManager() {
           availableLeagues={availableLeagues}
           onDelete={deleteAdminMatch}
           onUpdate={handleUpdate}
+          onCodeDerived={handleCodeDerived}
         />
+      )}
+
+      {view === "codes" && (
+        <DerivedCodesList codes={derivedCodes} onLoadIntoSlip={handleLoadDerivedCodeIntoSlip} />
       )}
 
       {view === "leagues" && <LeagueForm onAdd={handleAddLeague} />}
@@ -1179,9 +2015,10 @@ export function AdminMatchManager() {
       <div className="text-[11px] text-gray-400 bg-[#1e1e26] border border-[#2a2a35] rounded-xl p-3 flex items-start gap-2.5">
         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-[#F5C400]" />
         <div>
-          <span className="font-bold text-white">How target outcomes work:</span> When adding a match, set your target
-          winner, final score, and match pace. At kickoff time, the match automatically kicks off live. Goals will occur
-          during in-play, and the game will end at exactly the specified target outcome. Bets settle automatically upon full time.
+          <span className="font-bold text-white">How fixed matches and booking codes work:</span> When you schedule a match
+          with a target outcome, click <strong className="text-[#F5C400]">&quot;Derive Code&quot;</strong> to generate its booking code.
+          Players load this code directly into their betslip and stake with their real deposited balance. At kickoff, the match
+          plays live with virtual goals, reaching the target outcome by FT. The potential win is automatically credited to the user&apos;s wallet!
         </div>
       </div>
     </div>

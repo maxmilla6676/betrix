@@ -19,8 +19,11 @@ export function LoadCodeModal({ open, onOpenChange }: LoadCodeModalProps) {
 
   const handleLoad = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = code.trim().toUpperCase();
+    let clean = code.trim().toUpperCase();
     if (!clean) { setError("Please enter a booking code."); return; }
+    if (!clean.startsWith("BTX-") && /^[A-Z0-9]{4,10}$/.test(clean)) {
+      clean = `BTX-${clean}`;
+    }
     const found = await fetchSlipByCode(clean);
     if (!found || found.selections.length === 0) {
       setError(`No booking found for ${clean}.`);
