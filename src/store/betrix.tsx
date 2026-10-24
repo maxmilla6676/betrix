@@ -204,6 +204,20 @@ interface BetrixState {
   addAdminMatch: (m: AdminMatch) => Promise<void>;
   deleteAdminMatch: (id: string) => Promise<void>;
   updateAdminMatch: (m: Partial<AdminMatch> & { id: string }) => Promise<void>;
+
+  // Winning celebration modal (The glowing winning cup shown upon FT win)
+  winningCelebration: WinningCelebrationData | null;
+  showWinningCup: (data: WinningCelebrationData) => void;
+  closeWinningCup: () => void;
+}
+
+export interface WinningCelebrationData {
+  code: string;
+  payout: number;
+  potWin?: number | undefined;
+  stake?: number | undefined;
+  matchTitle?: string | undefined;
+  selections?: Selection[] | undefined;
 }
 
 const Ctx = createContext<BetrixState | null>(null);
@@ -253,6 +267,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const [platformUserCount, setPlatformUserCount] = useState(0);
   const [adminLeagues, setAdminLeagues] = useState<AdminLeague[]>([]);
   const [adminMatches, setAdminMatches] = useState<AdminMatch[]>([]);
+  const [winningCelebration, setWinningCelebration] = useState<WinningCelebrationData | null>(null);
+
+  const showWinningCup = useCallback((data: WinningCelebrationData) => {
+    setWinningCelebration(data);
+  }, []);
+
+  const closeWinningCup = useCallback(() => {
+    setWinningCelebration(null);
+  }, []);
 
   const authIdRef = useRef<string | null>(null);
   const isLoggedIn = !!authId && hasProfile;
@@ -663,6 +686,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
       for (const s of res.settled) {
         if (!mine.has(s.code)) continue;
         if (s.status === "WON") {
+          const slipData = historyRef.current.find((h) => h.code === s.code);
           toast.success(`🎉 Slip ${s.code} won! GHS ${s.payout.toFixed(2)} credited.`, {
             duration: 6000,
           });
@@ -673,6 +697,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
               "result",
             ),
           );
+          // Show the glowing winning cup modal right after FT with potential win credited
+          setWinningCelebration({
+            code: s.code,
+            payout: s.payout,
+            potWin: slipData?.potWin ?? s.payout,
+            stake: slipData?.stake,
+            matchTitle: slipData?.matchTitle,
+            selections: slipData?.selections,
+          });
         } else if (s.status === "VOID") {
           pushNotification(
             notif("Bet voided", `Slip ${s.code} was voided and your stake refunded.`, "result"),
@@ -957,6 +990,9 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     addAdminMatch,
     deleteAdminMatch,
     updateAdminMatch,
+    winningCelebration,
+    showWinningCup,
+    closeWinningCup,
   };
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -982,5 +1018,5 @@ export function makeCode() {
   return out;
 }
 
-export const formatPoints = (n: number) => `GHS ${n.toFixed(2)}`;
-export const formatGHS = (n: number) => `GHS ${n.toFixed(2)}`;
+export const formatPoints = (n: number) => `GHS ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const formatGHS = (n: number) => `GHS ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

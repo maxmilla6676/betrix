@@ -1873,6 +1873,7 @@ export function AdminMatchManager() {
     updateAdminMatch,
     settleNow,
     loadSlip,
+    showWinningCup,
   } = useBetrix();
 
   const [view, setView] = useState<"matches" | "list" | "codes" | "leagues">("matches");
@@ -1971,25 +1972,74 @@ export function AdminMatchManager() {
             {tab === "leagues" && `Custom Leagues (${adminLeagues.length})`}
           </button>
         ))}
-        <Button
-          type="button"
-          variant="outline"
-          disabled={settling}
-          onClick={async () => {
-            setSettling(true);
-            try {
-              const n = await settleNow("all");
-              toast.success(`${n} bet slip(s) settled.`);
-            } catch (err) {
-              toast.error(err instanceof Error ? err.message : "Settlement failed.");
-            } finally {
-              setSettling(false);
-            }
-          }}
-          className="ml-auto h-8 text-xs font-bold border-[#2a2a35] bg-[#1e1e26] text-gray-300 hover:text-white"
-        >
-          {settling ? "Settling…" : "Settle finished bets"}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              showWinningCup({
+                code: "WIN-5394",
+                payout: 5394.17,
+                potWin: 5394.17,
+                stake: 100,
+                matchTitle: "Virtual Multiple Accumulator (FT 4-0)",
+                selections: [
+                  {
+                    matchId: "m_for_mun",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_away",
+                    optionLabel: "Away",
+                    multiplier: 2.25,
+                    matchTitle: "Nottingham Forest vs Manchester United (FT 1:4)",
+                  },
+                  {
+                    matchId: "m_mci_bha",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_home",
+                    optionLabel: "Home",
+                    multiplier: 2.04,
+                    matchTitle: "Manchester City vs Brighton (FT 4:0)",
+                  },
+                  {
+                    matchId: "m_eve_cry",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_home",
+                    optionLabel: "Home",
+                    multiplier: 2.26,
+                    matchTitle: "Everton vs Crystal Palace (FT 2:1)",
+                  },
+                ],
+              });
+            }}
+            className="h-8 text-xs font-black border-yellow-500/40 bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 hover:text-yellow-300 shadow-sm flex items-center gap-1"
+          >
+            <Trophy className="h-3.5 w-3.5 text-yellow-400" />
+            <span>Preview Winning Cup</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            disabled={settling}
+            onClick={async () => {
+              setSettling(true);
+              try {
+                const n = await settleNow("all");
+                toast.success(`${n} bet slip(s) settled.`);
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Settlement failed.");
+              } finally {
+                setSettling(false);
+              }
+            }}
+            className="h-8 text-xs font-bold border-[#2a2a35] bg-[#1e1e26] text-gray-300 hover:text-white"
+          >
+            {settling ? "Settling…" : "Settle finished bets"}
+          </Button>
+        </div>
       </div>
 
       {view === "matches" && (

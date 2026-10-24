@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { BetrixWordmark } from "@/components/brand/Logo";
 import { SplashScreen } from "@/components/brand/SplashScreen";
 import { SlipContent } from "@/components/slip/PredictionSlip";
+import { WinningCupCelebrationModal } from "@/components/common/WinningCupModal";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
 
@@ -25,15 +26,39 @@ const mobileNav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { slip, isLoggedIn, profile } = useBetrix();
+  const { slip, isLoggedIn, profile, winningCelebration, closeWinningCup } = useBetrix();
   const [slipOpen, setSlipOpen] = useState(false);
 
   const isBare = pathname.startsWith("/admin");
-  if (isBare) return <>{children}</>;
+  if (isBare) {
+    return (
+      <>
+        {children}
+        <WinningCupCelebrationModal
+          isOpen={!!winningCelebration}
+          onClose={closeWinningCup}
+          payout={winningCelebration?.payout ?? 0}
+          code={winningCelebration?.code}
+          matchTitle={winningCelebration?.matchTitle}
+          selections={winningCelebration?.selections}
+          stake={winningCelebration?.stake}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0e0e11] text-white selection:bg-[#F5C400] selection:text-black font-sans select-none">
       <SplashScreen />
+      <WinningCupCelebrationModal
+        isOpen={!!winningCelebration}
+        onClose={closeWinningCup}
+        payout={winningCelebration?.payout ?? 0}
+        code={winningCelebration?.code}
+        matchTitle={winningCelebration?.matchTitle}
+        selections={winningCelebration?.selections}
+        stake={winningCelebration?.stake}
+      />
       {/* TOP HEADER (Hidden on /history as /history has its dedicated cashout & deposit header) */}
       {!pathname.startsWith("/history") && (
         <header className="sticky top-0 z-40 w-full bg-[#0c0c0e] border-b border-[#1f1f26] shadow-md">

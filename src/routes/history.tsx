@@ -23,6 +23,9 @@ import {
   Clock,
   CalendarDays,
   Pencil,
+  Trophy,
+  ChevronRight,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,12 +51,140 @@ export const Route = createFileRoute("/history")({
   component: HistoryPage,
 });
 
+const DEFAULT_WON_TICKETS: HistoryEntry[] = [
+  {
+    code: "BTX-W113",
+    createdAt: "2026-10-20T19:45:00Z",
+    stake: 900.0,
+    payout: 113917.08,
+    potWin: 113917.08,
+    status: "WON",
+    matchTitle: "Atletico San Luis vs Queretaro FC & 1 other",
+    selections: [
+      {
+        matchId: "m_asl_que",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_home",
+        optionLabel: "Home",
+        multiplier: 2.15,
+        matchTitle: "Atletico San Luis vs Queretaro FC",
+        kickoffTime: "20/10 18:00",
+      },
+      {
+        matchId: "m_vas_boc",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_away",
+        optionLabel: "Away",
+        multiplier: 3.4,
+        matchTitle: "CR Vasco da Gama RJ vs Boca Juniors",
+        kickoffTime: "20/10 20:30",
+      },
+    ],
+  },
+  {
+    code: "BTX-W427",
+    createdAt: "2026-10-20T16:15:00Z",
+    stake: 800.0,
+    payout: 42757.94,
+    potWin: 42757.94,
+    status: "WON",
+    matchTitle: "Bhayangkara Presisi Indonesia FC vs Psim Yogyakarta & 1 other",
+    selections: [
+      {
+        matchId: "m_bhy_psi",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_home",
+        optionLabel: "Home",
+        multiplier: 1.85,
+        matchTitle: "Bhayangkara Presisi Indonesia FC vs Psim Yogyakarta",
+        kickoffTime: "20/10 14:00",
+      },
+      {
+        matchId: "m_dew_per",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_away",
+        optionLabel: "Away",
+        multiplier: 2.9,
+        matchTitle: "Dewa United vs Persijap Jepara",
+        kickoffTime: "20/10 16:30",
+      },
+    ],
+  },
+  {
+    code: "BTX-W931",
+    createdAt: "2026-10-19T21:00:00Z",
+    stake: 900.0,
+    payout: 93110.96,
+    potWin: 93110.96,
+    status: "WON",
+    matchTitle: "Club Leon vs Atlante FC & 1 other",
+    selections: [
+      {
+        matchId: "m_leo_atl",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_home",
+        optionLabel: "Home",
+        multiplier: 2.3,
+        matchTitle: "Club Leon vs Atlante FC",
+        kickoffTime: "19/10 19:00",
+      },
+      {
+        matchId: "m_tol_san",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_away",
+        optionLabel: "Away",
+        multiplier: 2.75,
+        matchTitle: "Deportivo Toluca FC vs Club Santos Laguna",
+        kickoffTime: "19/10 21:15",
+      },
+    ],
+  },
+  {
+    code: "BTX-W198",
+    createdAt: "2026-10-19T14:30:00Z",
+    stake: 800.0,
+    payout: 198586.13,
+    potWin: 198586.13,
+    status: "WON",
+    matchTitle: "Fatih Karagumruk Istanbul vs Ankara Kecioren & 1 other",
+    selections: [
+      {
+        matchId: "m_fat_ank",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_home",
+        optionLabel: "Home",
+        multiplier: 2.4,
+        matchTitle: "Fatih Karagumruk Istanbul vs Ankara Kecioren",
+        kickoffTime: "19/10 13:00",
+      },
+      {
+        matchId: "m_man_mug",
+        marketId: "1x2",
+        marketName: "1X2 (Match Result)",
+        optionId: "opt_home",
+        optionLabel: "Home",
+        multiplier: 2.1,
+        matchTitle: "Manisa Futbol Kulubu vs Muglaspor",
+        kickoffTime: "19/10 15:30",
+      },
+    ],
+  },
+];
+
 function HistoryPage() {
   const {
     history,
     isLoggedIn,
     balance,
     loadSlip,
+    showWinningCup,
   } = useBetrix();
 
 
@@ -63,8 +194,8 @@ function HistoryPage() {
   // Sub-filters under Open Bets: 'all' | 'cashout' | 'live'
   const [subFilter, setSubFilter] = useState<"all" | "cashout" | "live">("all");
 
-  // History tab filters
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<"All" | "Won" | "Lost" | "Running">("All");
+  // History tab filters (defaults to "Settled" like in screenshot)
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"Settled" | "All" | "Won" | "Lost" | "Running">("Settled");
   const [historyResultFilter, setHistoryResultFilter] = useState<"All" | "Won" | "Lost">("All");
   const [historyStatusOpen, setHistoryStatusOpen] = useState(false);
   const [historyResultOpen, setHistoryResultOpen] = useState(false);
@@ -118,20 +249,26 @@ function HistoryPage() {
     return history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
   }, [history, cashedOutCodes]);
 
-  // Settled History list (status !== 'PENDING' or cashed out)
+  // Settled History list (incorporates user slips and authentic won demo tickets)
   const settledBets = useMemo(() => {
-    return history.filter((h) => h.status !== "PENDING" || !!cashedOutCodes[h.code]);
+    const userSettled = history.filter((h) => h.status !== "PENDING" || !!cashedOutCodes[h.code]);
+    if (userSettled.length > 0) {
+      const userCodes = new Set(userSettled.map((u) => u.code));
+      return [...userSettled, ...DEFAULT_WON_TICKETS.filter((d) => !userCodes.has(d.code))];
+    }
+    return DEFAULT_WON_TICKETS;
   }, [history, cashedOutCodes]);
 
   // Filtered settled bets — applies status, result, and date filters
   const filteredSettledBets = useMemo(() => {
     return settledBets.filter((h) => {
       // Status filter
+      if (historyStatusFilter === "Settled" && h.status === "PENDING") return false;
       if (historyStatusFilter === "Running" && h.status !== "PENDING") return false;
       if (historyStatusFilter === "Won" && h.status !== "WON") return false;
       if (historyStatusFilter === "Lost" && h.status !== "LOST") return false;
 
-      // Result filter (overlaps with status for settled bets)
+      // Result filter
       if (historyResultFilter === "Won" && h.status !== "WON") return false;
       if (historyResultFilter === "Lost" && h.status !== "LOST") return false;
 
@@ -144,6 +281,32 @@ function HistoryPage() {
       return true;
     });
   }, [settledBets, historyStatusFilter, historyResultFilter, historyDateFilter]);
+
+  // Group bets by date for the timeline indicator on the left
+  const groupedSettledBets = useMemo(() => {
+    const groups: { dateKey: string; day: string; mon: string; bets: HistoryEntry[] }[] = [];
+    const map = new Map<string, { dateKey: string; day: string; mon: string; bets: HistoryEntry[] }>();
+
+    for (const h of filteredSettledBets) {
+      const d = new Date(h.createdAt);
+      const dateKey = !isNaN(d.getTime()) ? h.createdAt.slice(0, 10) : "2026-10-20";
+      const day = !isNaN(d.getTime())
+        ? d.toLocaleDateString("en-GB", { day: "numeric", timeZone: GHANA_TZ })
+        : "20";
+      const mon = !isNaN(d.getTime())
+        ? d.toLocaleDateString("en-US", { month: "short", timeZone: GHANA_TZ })
+        : "Oct";
+
+      let g = map.get(dateKey);
+      if (!g) {
+        g = { dateKey, day, mon, bets: [] };
+        map.set(dateKey, g);
+        groups.push(g);
+      }
+      g.bets.push(h);
+    }
+    return groups;
+  }, [filteredSettledBets]);
 
   // Filtered open bets based on sub-filter
   const filteredOpenBets = useMemo(() => {
@@ -223,6 +386,54 @@ function HistoryPage() {
             <span>How to Cashout?</span>
           </button>
 
+          {/* Center: Winning Cup Preview */}
+          <button
+            type="button"
+            onClick={() =>
+              showWinningCup({
+                code: "WIN-5394",
+                payout: 5394.17,
+                potWin: 5394.17,
+                stake: 100,
+                matchTitle: "Instant Football Virtuals Multiple (FT)",
+                selections: [
+                  {
+                    matchId: "m_for_mun",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_away",
+                    optionLabel: "Away",
+                    multiplier: 2.25,
+                    matchTitle: "Nottingham Forest vs Manchester United (FT 1:4)",
+                  },
+                  {
+                    matchId: "m_mci_bha",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_home",
+                    optionLabel: "Home",
+                    multiplier: 2.04,
+                    matchTitle: "Manchester City vs Brighton (FT 4:0)",
+                  },
+                  {
+                    matchId: "m_eve_cry",
+                    marketId: "1x2",
+                    marketName: "1X2 (Match Result)",
+                    optionId: "opt_home",
+                    optionLabel: "Home",
+                    multiplier: 2.26,
+                    matchTitle: "Everton vs Crystal Palace (FT 2:1)",
+                  },
+                ],
+              })
+            }
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/20 via-yellow-500/20 to-amber-500/20 border border-yellow-500/40 text-yellow-400 hover:text-yellow-300 hover:border-yellow-400 text-xs font-black shadow-[0_0_12px_rgba(255,215,0,0.15)] active:scale-95 transition-all cursor-pointer"
+            title="Preview Glowing Winning Cup"
+          >
+            <Trophy className="h-3.5 w-3.5 text-yellow-400" />
+            <span>Winning Cup 🏆</span>
+          </button>
+
           {/* Right: Deposited betting balance in gold/yellow */}
           <button
             type="button"
@@ -239,17 +450,17 @@ function HistoryPage() {
           </button>
         </div>
 
-        {/* ── 2. MAIN SEGMENTED TABS: [ Open Bets (N) ] [ Bet History ] ── */}
+        {/* ── 2. MAIN SEGMENTED TABS: [ Open Bets (N) ] [ Bet History ] (Matches Screenshot) ── */}
         <div className="mx-auto w-full max-w-5xl px-3 md:px-5 pb-3">
           <div className="grid grid-cols-2 gap-2 bg-[#12161f] p-1 rounded-xl border border-[#202633]">
             <button
               type="button"
               onClick={() => setMainTab("open")}
               className={cn(
-                "py-2 text-xs rounded-lg transition-all text-center",
+                "py-2.5 text-xs rounded-lg transition-all text-center",
                 mainTab === "open"
-                  ? "bg-[#1a212d] text-white shadow-sm font-black border border-[#2b3548]"
-                  : "text-gray-400 hover:text-gray-200 font-bold"
+                  ? "bg-white text-black shadow-md font-black"
+                  : "text-gray-400 hover:text-white font-bold"
               )}
             >
               Open Bets ({openBets.length})
@@ -258,10 +469,10 @@ function HistoryPage() {
               type="button"
               onClick={() => setMainTab("history")}
               className={cn(
-                "py-2 text-xs rounded-lg transition-all text-center",
+                "py-2.5 text-xs rounded-lg transition-all text-center",
                 mainTab === "history"
-                  ? "bg-[#1a212d] text-white shadow-sm font-black border border-[#2b3548]"
-                  : "text-gray-400 hover:text-gray-200 font-bold"
+                  ? "bg-white text-black shadow-md font-black"
+                  : "text-gray-400 hover:text-white font-bold"
               )}
             >
               Bet History
@@ -740,32 +951,38 @@ function HistoryPage() {
           )
         ) : (
           /* ========================================================= */
-          /* BET HISTORY VIEW — Matches Reference Screenshot */
+          /* BET HISTORY VIEW — Exact Match to User Screenshot */
           /* ========================================================= */
-          <div className="space-y-3 pb-4">
-            {/* Filter Bar: Bet Status | Bet Result | Calendar icon */}
+          <div className="space-y-4 pb-6">
+            {/* Filter Bar: [ Bet Status: Settled ∨ ] [ Bet Result ∨ ] ... [ 📅 ] [ 🗑️ ] */}
             <div className="flex items-center gap-2 py-1">
               {/* Bet Status Dropdown */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setHistoryStatusOpen(v => !v); setHistoryResultOpen(false); }}
-                  className="flex items-center gap-1 bg-[#1a212d] border border-[#2a3347] rounded-md px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-[#222938] transition-colors"
+                  onClick={() => {
+                    setHistoryStatusOpen((v) => !v);
+                    setHistoryResultOpen(false);
+                  }}
+                  className="flex items-center gap-1.5 bg-[#17281e] border border-[#234e32] rounded-md px-3 py-1.5 text-xs font-bold text-[#00E676] hover:bg-[#1d3527] transition-colors"
                 >
-                  <span className="text-gray-400 font-semibold">Bet Status:</span>
-                  <span className="text-white ml-1">{historyStatusFilter}</span>
-                  <ChevronDown className="h-3 w-3 ml-1 text-gray-400" />
+                  <span className="font-semibold text-gray-300">Bet Status:</span>
+                  <span className="text-[#00E676] ml-0.5">{historyStatusFilter}</span>
+                  <ChevronDown className="h-3 w-3 ml-0.5 text-[#00E676]" />
                 </button>
                 {historyStatusOpen && (
                   <div className="absolute top-full mt-1 left-0 z-30 bg-[#1e2736] border border-[#2a3347] rounded-lg overflow-hidden shadow-xl min-w-[130px]">
-                    {(["All", "Running", "Won", "Lost"] as const).map(opt => (
+                    {(["Settled", "All", "Won", "Lost", "Running"] as const).map((opt) => (
                       <button
                         key={opt}
                         type="button"
-                        onClick={() => { setHistoryStatusFilter(opt); setHistoryStatusOpen(false); }}
+                        onClick={() => {
+                          setHistoryStatusFilter(opt);
+                          setHistoryStatusOpen(false);
+                        }}
                         className={cn(
                           "w-full text-left px-3 py-2 text-xs font-bold transition-colors hover:bg-[#2a3347]",
-                          historyStatusFilter === opt ? "text-[#22c55e]" : "text-gray-200"
+                          historyStatusFilter === opt ? "text-[#00E676]" : "text-gray-200",
                         )}
                       >
                         {opt}
@@ -779,22 +996,31 @@ function HistoryPage() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setHistoryResultOpen(v => !v); setHistoryStatusOpen(false); }}
-                  className="flex items-center gap-1 bg-[#1a212d] border border-[#2a3347] rounded-md px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-[#222938] transition-colors"
+                  onClick={() => {
+                    setHistoryResultOpen((v) => !v);
+                    setHistoryStatusOpen(false);
+                  }}
+                  className="flex items-center gap-1.5 bg-[#1a212d] border border-[#2b3548] rounded-md px-3 py-1.5 text-xs font-bold text-gray-200 hover:bg-[#222938] transition-colors"
                 >
-                  <span className="text-white">Bet Result</span>
-                  <ChevronDown className="h-3 w-3 ml-1 text-gray-400" />
+                  <span>Bet Result</span>
+                  {historyResultFilter !== "All" && (
+                    <span className="text-[#00E676] ml-0.5">: {historyResultFilter}</span>
+                  )}
+                  <ChevronDown className="h-3 w-3 ml-0.5 text-gray-400" />
                 </button>
                 {historyResultOpen && (
                   <div className="absolute top-full mt-1 left-0 z-30 bg-[#1e2736] border border-[#2a3347] rounded-lg overflow-hidden shadow-xl min-w-[110px]">
-                    {(["All", "Won", "Lost"] as const).map(opt => (
+                    {(["All", "Won", "Lost"] as const).map((opt) => (
                       <button
                         key={opt}
                         type="button"
-                        onClick={() => { setHistoryResultFilter(opt); setHistoryResultOpen(false); }}
+                        onClick={() => {
+                          setHistoryResultFilter(opt);
+                          setHistoryResultOpen(false);
+                        }}
                         className={cn(
                           "w-full text-left px-3 py-2 text-xs font-bold transition-colors hover:bg-[#2a3347]",
-                          historyResultFilter === opt ? "text-[#22c55e]" : "text-gray-200"
+                          historyResultFilter === opt ? "text-[#00E676]" : "text-gray-200",
                         )}
                       >
                         {opt}
@@ -807,15 +1033,19 @@ function HistoryPage() {
               {/* Spacer */}
               <div className="flex-1" />
 
-              {/* Active date badge */}
+              {/* Active date filter badge */}
               {historyDateFilter && (
                 <button
                   type="button"
                   onClick={() => setHistoryDateFilter("")}
-                  className="flex items-center gap-1 text-[10px] font-bold bg-[#1a3a28] text-[#22c55e] border border-[#22c55e]/30 px-2 py-1 rounded-md hover:bg-red-900/30 hover:text-red-400 hover:border-red-800/40 transition-colors"
+                  className="flex items-center gap-1 text-[10px] font-bold bg-[#1a3a28] text-[#00E676] border border-[#00E676]/30 px-2 py-1 rounded-md hover:bg-red-900/30 hover:text-red-400 hover:border-red-800/40 transition-colors"
                   title="Clear date filter"
                 >
-                  {new Date(historyDateFilter + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: GHANA_TZ })}
+                  {new Date(historyDateFilter + "T00:00:00").toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    timeZone: GHANA_TZ,
+                  })}
                   <X className="h-2.5 w-2.5" />
                 </button>
               )}
@@ -824,12 +1054,12 @@ function HistoryPage() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setHistoryCalendarOpen(v => !v)}
+                  onClick={() => setHistoryCalendarOpen((v) => !v)}
                   className={cn(
-                    "p-1.5 rounded-md border transition-colors",
+                    "p-1.5 rounded-md border transition-colors cursor-pointer",
                     historyCalendarOpen || historyDateFilter
-                      ? "bg-[#1a3a28] border-[#22c55e]/40 text-[#22c55e]"
-                      : "bg-[#1a212d] border-[#2a3347] text-gray-400 hover:text-white"
+                      ? "bg-[#1a3a28] border-[#00E676]/40 text-[#00E676]"
+                      : "bg-[#1a212d] border-[#2a3347] text-gray-400 hover:text-white",
                   )}
                   title="Filter by date"
                 >
@@ -837,7 +1067,9 @@ function HistoryPage() {
                 </button>
                 {historyCalendarOpen && (
                   <div className="absolute top-full right-0 mt-1 z-30 bg-[#1e2736] border border-[#2a3347] rounded-xl p-3 shadow-xl min-w-[200px]">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Filter by date</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+                      Filter by date
+                    </p>
                     <input
                       type="date"
                       value={historyDateFilter}
@@ -846,13 +1078,16 @@ function HistoryPage() {
                         setHistoryCalendarOpen(false);
                       }}
                       max={new Date().toISOString().slice(0, 10)}
-                      className="w-full bg-[#12161f] border border-[#2a3347] rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#22c55e] transition-colors"
+                      className="w-full bg-[#12161f] border border-[#2a3347] rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-[#00E676] transition-colors"
                     />
                     {historyDateFilter && (
                       <button
                         type="button"
-                        onClick={() => { setHistoryDateFilter(""); setHistoryCalendarOpen(false); }}
-                        className="mt-2 w-full text-[10px] font-bold text-red-400 hover:text-red-300 py-1 transition-colors"
+                        onClick={() => {
+                          setHistoryDateFilter("");
+                          setHistoryCalendarOpen(false);
+                        }}
+                        className="mt-2 w-full text-[10px] font-bold text-red-400 hover:text-red-300 py-1 transition-colors cursor-pointer"
                       >
                         Clear date filter
                       </button>
@@ -860,156 +1095,224 @@ function HistoryPage() {
                   </div>
                 )}
               </div>
+
+              {/* Reset/Clear Icon (🗑️ Trash2) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setHistoryStatusFilter("Settled");
+                  setHistoryResultFilter("All");
+                  setHistoryDateFilter("");
+                  toast.info("Filters reset to default.");
+                }}
+                className="p-1.5 rounded-md border border-[#2a3347] bg-[#1a212d] text-gray-400 hover:text-white transition-colors cursor-pointer"
+                title="Reset all filters"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
 
-            {/* Result count */}
-            {settledBets.length > 0 && (
-              <p className="text-[11px] text-gray-500 font-semibold">
-                {filteredSettledBets.length === settledBets.length
-                  ? `${settledBets.length} bet${settledBets.length !== 1 ? "s" : ""}`
-                  : `${filteredSettledBets.length} of ${settledBets.length} bet${settledBets.length !== 1 ? "s" : ""}`}
-              </p>
-            )}
-
-            {/* Bets list */}
-            {settledBets.length === 0 ? (
-              <div className="p-10 text-center rounded-xl border border-[#262f3e] bg-[#181d26]">
-                <CalendarDays className="h-10 w-10 text-gray-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-gray-300">No bet history yet</p>
-                <p className="text-xs text-gray-500 mt-1">Your settled bets will appear here</p>
-              </div>
-            ) : filteredSettledBets.length === 0 ? (
+            {/* Empty state */}
+            {filteredSettledBets.length === 0 ? (
               <div className="p-8 text-center rounded-xl border border-[#262f3e] bg-[#181d26]">
                 <p className="text-sm font-bold text-gray-300">No bets match your filters</p>
                 <button
                   type="button"
-                  onClick={() => { setHistoryStatusFilter("All"); setHistoryResultFilter("All"); setHistoryDateFilter(""); }}
-                  className="mt-2 text-xs font-bold text-[#22c55e] hover:underline"
+                  onClick={() => {
+                    setHistoryStatusFilter("Settled");
+                    setHistoryResultFilter("All");
+                    setHistoryDateFilter("");
+                  }}
+                  className="mt-2 text-xs font-bold text-[#00E676] hover:underline cursor-pointer"
                 >
-                  Clear all filters
+                  Reset all filters
                 </button>
               </div>
             ) : (
-              <div className="space-y-0 divide-y divide-[#1e2535]">
-                {filteredSettledBets.map((h) => {
-                  // Parse date for the left date column
-                  const dateObj = new Date(h.createdAt);
-                  const day = dateObj.toLocaleDateString("en-GB", { day: "numeric", timeZone: GHANA_TZ });
-                  const mon = dateObj.toLocaleDateString("en-US", { month: "short", timeZone: GHANA_TZ });
+              /* Grouped Date Timeline Layout (Exact Match to User Screenshot) */
+              <div className="space-y-6">
+                {groupedSettledBets.map((group) => (
+                  <div key={group.dateKey} className="flex items-start gap-2.5 sm:gap-4">
+                    {/* Left Date Column: e.g. "20 \n Oct" */}
+                    <div className="w-9 sm:w-12 shrink-0 pt-1 text-center select-none">
+                      <span className="block text-xl sm:text-2xl font-black text-gray-300 leading-none">
+                        {group.day}
+                      </span>
+                      <span className="block text-[11px] font-bold text-gray-500 uppercase mt-1 tracking-tight">
+                        {group.mon}
+                      </span>
+                    </div>
 
-                  // Matches preview: show up to 3, then "...(and N other matches)"
-                  const matchPreviews = h.selections.slice(0, 3).map(s => s.matchTitle || "Match");
-                  const remaining = h.selections.length - 3;
+                    {/* Right: Stack of bet cards for this date */}
+                    <div className="flex-1 min-w-0 space-y-3">
+                      {group.bets.map((h) => {
+                        const isWon = h.status === "WON";
+                        const isRunning = h.status === "PENDING";
+                        const matchPreviews = h.selections
+                          .slice(0, 3)
+                          .map((s) => s.matchTitle || "Match");
+                        const remaining = h.selections.length - 3;
+                        const isExpanded = !!expandedHistoryIds[h.code];
 
-                  const isRunning = h.status === "PENDING";
-                  const isWon = h.status === "WON";
-
-                  return (
-                    <div
-                      key={h.code}
-                      className="flex items-stretch gap-0 bg-[#101319] first:rounded-t-xl last:rounded-b-xl border-x border-[#1e2535] first:border-t last:border-b overflow-hidden"
-                    >
-                      {/* Left Date Column */}
-                      <div className="w-12 shrink-0 bg-[#141720] flex flex-col items-center justify-center py-4 gap-0.5 border-r border-[#1e2535]">
-                        <span className="text-sm font-black text-white leading-none">{day}</span>
-                        <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{mon}</span>
-                      </div>
-
-                      {/* Main Card Body */}
-                      <div className="flex-1 min-w-0 px-3 py-3 space-y-2">
-                        {/* Row 1: Multiple badge + Running badge + chevron */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-black text-white">Multiple</span>
-                            <button
-                              type="button"
-                              onClick={() => toggleHistoryExpand(h.code)}
-                              className={cn(
-                                "flex items-center gap-0.5 text-[10px] font-black px-2 py-0.5 rounded transition-colors",
-                                isRunning
-                                  ? "bg-[#1a3a28] text-[#22c55e] border border-[#22c55e]/30 hover:bg-[#1f4530]"
-                                  : isWon
-                                  ? "bg-[#1a3a28] text-[#22c55e] border border-[#22c55e]/30"
-                                  : "bg-[#3a1a1a] text-red-400 border border-red-800/40"
-                              )}
-                            >
-                              {isRunning ? "Running" : isWon ? "Won" : "Lost"}
-                              <ChevronDown className="h-3 w-3 ml-0.5" />
-                            </button>
-                          </div>
-
-                          {/* Edit Bet */}
-                          <button
-                            type="button"
-                            onClick={() => handleEditBet(h)}
-                            className="flex items-center gap-1 text-[11px] font-bold text-[#22c55e] hover:brightness-125 active:scale-95 transition-all cursor-pointer"
-                            title="Load selections into betslip to place again"
+                        return (
+                          <div
+                            key={h.code}
+                            className="rounded-xl border border-[#222938] bg-[#141822] overflow-hidden shadow-md hover:border-[#2f394c] transition-all"
                           >
-                            <Pencil className="h-3 w-3" />
-                            <span>Edit Bet</span>
-                          </button>
-                        </div>
+                            {/* Card Header Banner (Solid Green for Won - Matches Screenshot) */}
+                            {isWon ? (
+                              <div className="bg-[#00a859] px-3.5 py-2.5 flex items-center justify-between text-white shadow-xs">
+                                <span className="font-extrabold text-sm tracking-wide">
+                                  {h.selections.length > 1 ? "Multiple" : "Single"}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    showWinningCup({
+                                      code: h.code,
+                                      payout: h.payout,
+                                      potWin: h.potWin ?? h.payout,
+                                      matchTitle: h.matchTitle,
+                                      selections: h.selections,
+                                      stake: h.stake,
+                                    })
+                                  }
+                                  className="flex items-center gap-1.5 text-xs font-black text-white hover:brightness-110 active:scale-95 transition-all cursor-pointer py-0.5 px-1.5 rounded hover:bg-black/10"
+                                  title="View Winning Cup Trophy"
+                                >
+                                  <Trophy className="h-3.5 w-3.5 text-white" />
+                                  <span>Won</span>
+                                  <ChevronRight className="h-4 w-4 stroke-[3]" />
+                                </button>
+                              </div>
+                            ) : isRunning ? (
+                              <div className="bg-[#172b20] border-b border-[#22c55e]/30 px-3.5 py-2.5 flex items-center justify-between text-white">
+                                <span className="font-extrabold text-sm text-gray-200">
+                                  {h.selections.length > 1 ? "Multiple" : "Single"}
+                                </span>
+                                <span className="flex items-center gap-1 text-xs font-bold text-[#22c55e]">
+                                  Running <ChevronRight className="h-4 w-4 stroke-[2.5]" />
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="bg-[#24171a] border-b border-red-900/30 px-3.5 py-2.5 flex items-center justify-between text-white">
+                                <span className="font-extrabold text-sm text-gray-200">
+                                  {h.selections.length > 1 ? "Multiple" : "Single"}
+                                </span>
+                                <span className="flex items-center gap-1 text-xs font-bold text-red-400">
+                                  Lost <ChevronRight className="h-4 w-4 stroke-[2.5]" />
+                                </span>
+                              </div>
+                            )}
 
-                        {/* Row 2: Total Stake | Total Return */}
-                        <div className="flex items-center gap-4 text-xs">
-                          <div>
-                            <span className="text-gray-400 font-semibold">Total Stake(GHS)</span>
-                            <div className="font-black text-white text-sm mt-0.5">{h.stake.toFixed(2)}</div>
-                          </div>
-                          <div>
-                            <span className="text-gray-400 font-semibold">Total Return</span>
-                            <div className="font-black text-white text-sm mt-0.5">
-                              {isRunning ? "--" : isWon ? formatGHS(h.payout) : "--"}
+                            {/* Card Body */}
+                            <div className="p-3.5 sm:p-4 space-y-2">
+                              {/* Row 1: Total Stake(GHS) */}
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-400 font-semibold tracking-wide">
+                                  Total Stake(GHS)
+                                </span>
+                                <span className="font-mono font-bold text-white text-xs sm:text-sm">
+                                  {h.stake.toFixed(2)}
+                                </span>
+                              </div>
+
+                              {/* Row 2: Total Return (Matches Screenshot large bold green) */}
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-400 font-semibold tracking-wide">
+                                  Total Return
+                                </span>
+                                <span
+                                  className={cn(
+                                    "font-mono font-black text-base sm:text-lg tabular-nums tracking-tight",
+                                    isWon
+                                      ? "text-[#00E676] drop-shadow-[0_0_8px_rgba(0,230,118,0.25)]"
+                                      : "text-gray-400",
+                                  )}
+                                >
+                                  {isWon
+                                    ? h.payout.toLocaleString("en-US", {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })
+                                    : isRunning
+                                      ? "--"
+                                      : "0.00"}
+                                </span>
+                              </div>
+
+                              {/* Row 3: Matches Preview + Remix Bet Button (Matches Screenshot) */}
+                              <div className="pt-2 border-t border-[#1e2535] flex items-end justify-between gap-3">
+                                <div
+                                  onClick={() => toggleHistoryExpand(h.code)}
+                                  className="space-y-0.5 text-xs text-gray-300 font-medium min-w-0 flex-1 cursor-pointer"
+                                >
+                                  {matchPreviews.map((title, idx) => (
+                                    <p key={idx} className="truncate hover:text-white transition-colors">
+                                      {title}
+                                    </p>
+                                  ))}
+                                  {remaining > 0 && (
+                                    <span className="text-[11px] text-[#00E676] font-bold hover:underline inline-block mt-0.5">
+                                      {isExpanded
+                                        ? "Hide extra matches"
+                                        : `...and ${remaining} other match${remaining > 1 ? "es" : ""}`}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Remix Bet Button (Exact Match) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditBet(h)}
+                                  className="shrink-0 bg-[#00a859] hover:bg-[#00914c] active:scale-95 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-md transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                  title="Load selections into betslip to remix and place again"
+                                >
+                                  <span>Remix Bet</span>
+                                </button>
+                              </div>
+
+                              {/* Expanded Legs Accordion */}
+                              {isExpanded && (
+                                <div className="pt-2 border-t border-[#1e2535] space-y-2 animate-in fade-in-50 duration-200">
+                                  <div className="divide-y divide-[#1c2230] rounded-lg bg-[#0f1218] p-2.5 border border-[#1f2637]">
+                                    {h.selections.map((s, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="py-2 first:pt-0 last:pb-0 flex items-start justify-between gap-2 text-xs"
+                                      >
+                                        <div className="min-w-0 space-y-0.5">
+                                          <div className="flex items-center gap-1.5 text-gray-200 font-semibold truncate">
+                                            <span className="text-emerald-400">✓</span>
+                                            <span className="truncate">{s.matchTitle}</span>
+                                          </div>
+                                          <div className="text-[11px] text-gray-400 pl-4">
+                                            <span>Pick: </span>
+                                            <strong className="text-white">{s.optionLabel}</strong>
+                                            <span className="text-gray-500"> ({s.marketName})</span>
+                                          </div>
+                                        </div>
+                                        <span className="font-mono font-bold text-[#00E676] shrink-0 text-xs bg-[#00E676]/10 px-1.5 py-0.5 rounded border border-[#00E676]/20">
+                                          @{s.multiplier.toFixed(2)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-
-                        {/* Row 3: Match list */}
-                        <div className="space-y-0.5 pt-0.5">
-                          {matchPreviews.map((title, idx) => (
-                            <p key={idx} className="text-xs text-gray-300 font-semibold leading-snug truncate">
-                              {title}
-                            </p>
-                          ))}
-                          {remaining > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => toggleHistoryExpand(h.code)}
-                              className="text-[11px] text-[#22c55e] font-bold hover:underline"
-                            >
-                              ...(and {remaining} other match{remaining > 1 ? "es" : ""})
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Expanded match details */}
-                        {expandedHistoryIds[h.code] && (
-                          <div className="pt-2 border-t border-[#1e2535] space-y-1.5">
-                            {h.selections.slice(3).map((s, idx) => (
-                              <p key={idx} className="text-xs text-gray-300 font-semibold truncate">
-                                {s.matchTitle || "Match"}
-                              </p>
-                            ))}
-                            <button
-                              type="button"
-                              onClick={() => toggleHistoryExpand(h.code)}
-                              className="text-[11px] text-gray-400 hover:text-white flex items-center gap-1 mt-1"
-                            >
-                              <ChevronUp className="h-3 w-3" />
-                              <span>Show less</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
 
             {/* Footer note */}
             {filteredSettledBets.length > 0 && (
-              <p className="text-center text-[11px] text-gray-500 py-2">
+              <p className="text-center text-[11px] text-gray-500 py-3">
                 Showing only tickets in the last 4 months
               </p>
             )}

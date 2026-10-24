@@ -18,10 +18,11 @@ import {
   TrendingUp,
   Lock,
   Radio,
+  Trophy,
 } from "lucide-react";
 import { LiveBadge } from "@/components/match/LiveMatchCard";
 import { TeamCrest } from "@/components/common/TeamCrest";
-import { useBetrix } from "@/store/betrix";
+import { useBetrix, formatGHS } from "@/store/betrix";
 import { dynamicTeams, dynamicLeagues } from "@/services/sportsApi";
 import { cn } from "@/lib/utils";
 import {
@@ -276,7 +277,28 @@ function MatchDetailPage() {
 
 function MatchDetailView({ match }: { match: Match }) {
   const navigate = useNavigate();
-  const { toggleSelection, isSelected, slip } = useBetrix();
+  const { toggleSelection, isSelected, slip, history, showWinningCup, settleNow } = useBetrix();
+
+  // Check if user staked on this match and won
+  const wonSlipsForMatch = useMemo(() => {
+    return history.filter(
+      (h) =>
+        h.status === "WON" &&
+        h.selections.some((s) => s.matchId === match.id),
+    );
+  }, [history, match.id]);
+
+  // When match finishes at FT, auto-settle any pending slips on it
+  useEffect(() => {
+    if (match.status === "FINISHED") {
+      const hasPendingSlip = history.some(
+        (h) => h.status === "PENDING" && h.selections.some((s) => s.matchId === match.id)
+      );
+      if (hasPendingSlip) {
+        settleNow().catch(() => undefined);
+      }
+    }
+  }, [match.status, match.id, history, settleNow]);
 
   const home = teamById(match.homeId) || dynamicTeams.get(match.homeId) || {
     id: match.homeId,
@@ -511,9 +533,45 @@ function MatchDetailView({ match }: { match: Match }) {
           </div>
 
           {match.status === "FINISHED" ? (
-            <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gray-600/30 bg-gray-600/10 px-3 py-2 text-xs font-bold text-gray-300">
-              <Lock className="h-4 w-4 shrink-0 text-gray-400" />
-              <span>This match has finished. All betting markets and odds are locked.</span>
+            <div className="space-y-2 mt-3">
+              {wonSlipsForMatch.length > 0 && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-yellow-400/50 bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-[#16161a] p-3 shadow-[0_0_20px_rgba(255,215,0,0.25)] animate-in fade-in-50">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 flex items-center justify-center text-black shadow-md shrink-0">
+                      <Trophy className="h-5 w-5" />
+                    </div>
+                    <div className="text-left min-w-0">
+                      <p className="text-xs font-black text-[#FFD700] uppercase tracking-wide">
+                        YOU WON AS STAKED!
+                      </p>
+                      <p className="text-[11px] text-gray-200 truncate">
+                        Win credited: <strong className="text-white font-black">{formatGHS(wonSlipsForMatch[0]?.payout || 0)}</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      showWinningCup({
+                        code: wonSlipsForMatch[0]?.code || "",
+                        payout: wonSlipsForMatch[0]?.payout || 0,
+                        potWin: wonSlipsForMatch[0]?.potWin,
+                        matchTitle: wonSlipsForMatch[0]?.matchTitle,
+                        selections: wonSlipsForMatch[0]?.selections,
+                        stake: wonSlipsForMatch[0]?.stake,
+                      })
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-[#FFD700] hover:bg-[#ffe14d] active:scale-95 text-black font-black text-xs shadow-md transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                  >
+                    <span>Winning Cup</span>
+                    <span>🏆</span>
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-center gap-2 rounded-xl border border-gray-600/30 bg-gray-600/10 px-3 py-2 text-xs font-bold text-gray-300">
+                <Lock className="h-4 w-4 shrink-0 text-gray-400" />
+                <span>This match has finished. All betting markets and odds are locked.</span>
+              </div>
             </div>
           ) : isMatchLocked(match) ? (
             <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300">

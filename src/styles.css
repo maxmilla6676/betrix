@@ -215,3 +215,19 @@
 @utility rise-in {
   animation: betrix-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+@keyframes cup-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.65)) drop-shadow(0 0 50px rgba(245, 196, 0, 0.4));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 35px rgba(255, 230, 0, 0.85)) drop-shadow(0 0 70px rgba(255, 180, 0, 0.6));
+    transform: scale(1.02);
+  }
+}
+
+@utility animate-cup-glow {
+  animation: cup-glow 3.2s ease-in-out infinite;
+}
+
