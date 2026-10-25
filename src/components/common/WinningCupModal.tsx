@@ -14,6 +14,7 @@ export interface WinningCupModalProps {
   selections?: Selection[] | undefined;
   stake?: number | undefined;
   onNextRound?: (() => void) | undefined;
+  onDetails?: (() => void) | undefined;
 }
 
 /**
@@ -160,6 +161,7 @@ export function WinningCupCelebrationModal({
   selections,
   stake,
   onNextRound,
+  onDetails,
 }: WinningCupModalProps) {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -176,13 +178,40 @@ export function WinningCupCelebrationModal({
     return () => clearTimeout(timer);
   }, [isOpen]);
 
-  const handleShowOff = useCallback(() => {
+  const handleDetails = useCallback(() => {
+    if (onDetails) {
+      onDetails();
+    } else {
+      onClose();
+      navigate({ to: "/history" });
+    }
+  }, [onClose, onDetails, navigate]);
+
+  const handleShowoff = useCallback(() => {
     launchConfetti(canvasRef.current);
     const amountStr = formatGHS(payout);
     const codeStr = code ? ` Booking Code: ${code}` : "";
     const textToShare = `🏆 I JUST WON ${amountStr} on BETRIX! ⚡⚽ Check my winning bet!${codeStr} #BETRIX #Winner`;
 
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+    if (navigator.share) {
+      navigator
+        .share({
+          title: "BETRIX Big Win!",
+          text: textToShare,
+        })
+        .catch(() => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToShare).then(() => {
+              setCopied(true);
+              toast.success("🎉 Winning slip copied to clipboard!", {
+                description: "Share your glory with friends or on social media!",
+                duration: 4000,
+              });
+              setTimeout(() => setCopied(false), 3000);
+            });
+          }
+        });
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(textToShare).then(() => {
         setCopied(true);
         toast.success("🎉 Winning slip copied to clipboard!", {
@@ -195,15 +224,6 @@ export function WinningCupCelebrationModal({
       toast.success("🎉 YOU WON! Show off your trophy!", { duration: 3000 });
     }
   }, [payout, code]);
-
-  const handleNextRound = useCallback(() => {
-    onClose();
-    if (onNextRound) {
-      onNextRound();
-    } else {
-      navigate({ to: "/live" });
-    }
-  }, [onClose, onNextRound, navigate]);
 
   if (!isOpen) return null;
 
@@ -349,92 +369,24 @@ export function WinningCupCelebrationModal({
           </div>
         </div>
 
-        {/* ── 4. BRAND PILL BADGE: "From BETRIX Instant Virtuals" ── */}
-        <div className="mt-[-8px] mb-4 sm:mb-5 z-20">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#16161c]/90 border border-[#2b2b36] shadow-[0_4px_16px_rgba(0,0,0,0.6)] backdrop-blur-sm">
-            {/* Red circular badge with 'B' / Betrix icon */}
-            <div className="h-4 w-4 rounded-full bg-[#E41B23] flex items-center justify-center text-white text-[10px] font-black shadow-[0_0_8px_rgba(228,27,35,0.7)]">
-              B
-            </div>
-            <span className="text-xs font-bold text-gray-200 tracking-wide">
-              From BETRIX Instant Virtuals
-            </span>
-          </div>
-        </div>
-
-        {/* ── 5. WINNING MATCH DETAILS ACCORDION (Matches underlying media context) ── */}
-        {(selections && selections.length > 0) || matchTitle ? (
-          <div className="w-full mb-4 px-1">
-            <button
-              type="button"
-              onClick={() => setShowMatchesList((prev) => !prev)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#15171e]/80 border border-[#242733] text-xs text-gray-300 hover:text-white hover:border-[#333748] transition-all cursor-pointer"
-            >
-              <div className="flex items-center gap-1.5 truncate">
-                <CheckCircle2 className="h-3.5 w-3.5 text-[#00E676] shrink-0" />
-                <span className="font-semibold truncate">
-                  {matchTitle || `${selections?.length || 1} Winning Selection${(selections?.length || 1) > 1 ? "s" : ""}`}
-                </span>
-                {code && (
-                  <span className="text-[10px] font-mono font-bold text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded border border-yellow-400/20">
-                    {code}
-                  </span>
-                )}
-              </div>
-              <span className="text-[11px] text-[#00E676] font-bold shrink-0 ml-2">
-                {showMatchesList ? "Hide Legs" : "View Legs"}
-              </span>
-            </button>
-
-            {/* Expanded selections list matching the background of user's media */}
-            {showMatchesList && selections && (
-              <div className="mt-1.5 p-2.5 rounded-lg bg-[#101217]/95 border border-[#232635] text-left space-y-2 max-h-48 overflow-y-auto no-scrollbar animate-in slide-in-from-top-2 duration-200">
-                {selections.map((s, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between text-xs border-b border-[#1c1f2b] last:border-b-0 pb-1.5 last:pb-0"
-                  >
-                    <div className="min-w-0 pr-2">
-                      <div className="flex items-center gap-1 text-[11px] text-gray-400">
-                        <CheckCircle2 className="h-3 w-3 text-[#00E676] shrink-0" />
-                        <span className="truncate font-semibold text-gray-200">{s.matchTitle}</span>
-                      </div>
-                      <div className="text-[10px] text-yellow-400/90 font-medium pl-4">
-                        Pick: <strong className="text-white">{s.optionLabel}</strong> ({s.marketName})
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-[11px] font-mono font-black text-[#00E676] bg-[#00E676]/10 px-1.5 py-0.5 rounded border border-[#00E676]/20">
-                        @{s.multiplier.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : null}
-
-        {/* ── 6. ACTION BUTTONS: "Show Off" & "Next Round" ── */}
-        <div className="grid grid-cols-2 gap-3 w-full">
-          {/* "Show Off" Button (Dark with Crisp Green Border) */}
+        {/* ── ACTION BUTTONS: "Details" (left) & "Showoff" (right) ── */}
+        <div className="grid grid-cols-2 gap-3 w-full mt-2">
+          {/* "Details" Button (Dark with Crisp Green Border) */}
           <button
             type="button"
-            onClick={handleShowOff}
+            onClick={handleDetails}
             className="w-full border-2 border-[#00C853] bg-[#00C853]/10 hover:bg-[#00C853]/20 active:scale-95 text-[#00E676] font-black text-sm sm:text-base py-3 sm:py-3.5 rounded-xl transition-all shadow-[0_0_15px_rgba(0,200,83,0.2)] flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <Share2 className="h-4 w-4" />
-            <span>{copied ? "Copied!" : "Show Off"}</span>
+            <span>Details</span>
           </button>
 
-          {/* "Next Round" Button (Solid Vibrant Green) */}
+          {/* "Showoff" Button (Solid Vibrant Green) */}
           <button
             type="button"
-            onClick={handleNextRound}
+            onClick={handleShowoff}
             className="w-full bg-[#00C853] hover:bg-[#00E676] active:scale-95 text-black font-black text-sm sm:text-base py-3 sm:py-3.5 rounded-xl transition-all shadow-[0_4px_22px_rgba(0,200,83,0.45)] hover:shadow-[0_4px_28px_rgba(0,230,118,0.65)] flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <span>Next Round</span>
-            <ChevronRight className="h-4 w-4 stroke-[3]" />
+            <span>{copied ? "Copied!" : "Showoff"}</span>
           </button>
         </div>
 

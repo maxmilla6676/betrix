@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Gamepad2,
@@ -26,8 +26,19 @@ const mobileNav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { slip, isLoggedIn, profile, winningCelebration, closeWinningCup } = useBetrix();
+  const { slip, isLoggedIn, profile, winningCelebration, closeWinningCup, showWinningCup } = useBetrix();
   const [slipOpen, setSlipOpen] = useState(false);
+
+  useEffect(() => {
+    (window as unknown as { __showWinningCup?: (payout?: number) => void }).__showWinningCup = (payout = 5394.17) => {
+      showWinningCup({
+        code: "WIN-5394",
+        payout,
+        potWin: payout,
+        matchTitle: "Instant Football Virtuals Multiple (FT)",
+      });
+    };
+  }, [showWinningCup]);
 
   const isBare = pathname.startsWith("/admin");
   if (isBare) {
