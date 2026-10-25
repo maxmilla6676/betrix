@@ -1,8 +1,14 @@
 import type { Selection, HistoryEntry } from "@/store/betrix";
 import type { Match } from "@/data/football";
 import type { AdminMatch } from "@/data/adminMatches";
-import { computeAdminMatchLiveState } from "@/data/adminMatches";
+import { computeAdminMatchLiveState, getGoalSchedule } from "@/data/adminMatches";
 import { GHANA_TZ } from "@/lib/ghana-time";
+
+export interface GoalEvent {
+  minute: number;
+  team: "home" | "away";
+  scorer?: string;
+}
 
 export interface LegLiveStatus {
   status: "UPCOMING" | "LIVE" | "WON" | "LOST";
@@ -12,14 +18,30 @@ export interface LegLiveStatus {
   homeScore: number;
   awayScore: number;
   scoreText: string;
-  liveOdds?: number;
+  liveOdds?: number | undefined;
   isWon: boolean;
+  scheduledGoals: GoalEvent[];
+  lastGoal?: GoalEvent | undefined;
+  isGoalJustScored?: boolean | undefined;
+}
+
+/**
+ * Deterministic hash for string IDs
+ */
+function stringHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return Math.abs(hash);
 }
 
 /**
  * Checks whether a selection outcome is winning given the final or current score.
  */
-function isWinningSelection(s: Selection, homeScore: number, awayScore: number): boolean {
+export function isWinningSelection(s: Selection, homeScore: number, awayScore: number): boolean {
   const opt = (s.optionLabel || "").trim();
 
   // Correct Score (e.g. "1:1", "2:2", "1:0")
@@ -55,7 +77,7 @@ function isWinningSelection(s: Selection, homeScore: number, awayScore: number):
 /**
  * Calculates responsive live odds as the match minute advances.
  */
-function calculateLiveOdds(
+export function calculateLiveOdds(
   multiplier: number,
   minute: number,
   homeScore: number,
@@ -73,45 +95,60 @@ function calculateLiveOdds(
 }
 
 /**
+ * Scheduled goals for reference matches matching user screenshot:
+ * - Mexico vs Peru (Final target: 1:1)
+ *   Goals: 28' Mexico (1:0), 71' Peru (1:1)
+ * - Club Aurora vs San Antonio Bulo Bulo (Final target: 2:2)
+ *   Goals: 18' Aurora (1:0), 39' Bulo Bulo (1:1), 54' Aurora (2:1), 83' Bulo Bulo (2:2)
+ */
+export const MEXICO_PERU_GOALS: GoalEvent[] = [
+  { minute: 28, team: "home", scorer: "Mexico" },
+  { minute: 71, team: "away", scorer: "Peru" },
+];
+
+export const AURORA_BULO_GOALS: GoalEvent[] = [
+  { minute: 18, team: "home", scorer: "Club Aurora" },
+  { minute: 39, team: "away", scorer: "San Antonio Bulo Bulo" },
+  { minute: 54, team: "home", scorer: "Club Aurora" },
+  { minute: 83, team: "away", scorer: "San Antonio Bulo Bulo" },
+];
+
+/**
+ * Deterministically generates goal timeline for any match from 0' to 90'.
+ */
+export function getMatchGoalSchedule(
+  matchId: string,
+  targetHome: number,
+  targetAway: number,
+  homeTeamName = "Home",
+  awayTeamName = "Away",
+): GoalEvent[] {
+  const total = targetHome + targetAway;
+  if (total <= 0) return [];
+
+  const seed = stringHash(matchId || "match");
+  const rawGoals = getGoalSchedule(matchId, targetHome, targetAway);
+
+  return rawGoals.map((g) => ({
+    minute: g.minute,
+    team: g.team,
+    scorer: g.team === "home" ? homeTeamName : awayTeamName,
+  }));
+}
+
+/**
  * Evaluates the real-time live match state of an open bet selection leg.
- * Tracks matches right from kickoff through H1, H2, and FT.
+ * Tracks matches continuously from 0' to 90' right from kickoff time,
+ * with goal events occurring at their scheduled minutes.
  */
 export function getLegLiveStatus(
   s: Selection,
   now = Date.now(),
   allMatches: Match[] = [],
   adminMatches: AdminMatch[] = [],
+  simMinuteOverride?: number,
 ): LegLiveStatus {
   const title = (s.matchTitle || "").toLowerCase();
-
-  // Match: Club Aurora vs San Antonio Bulo Bulo (Completed FT 2:2, WON with Circular green checkmark)
-  if (title.includes("aurora") && title.includes("bulo")) {
-    return {
-      status: "WON",
-      hasStarted: true,
-      minute: 90,
-      half: "FT",
-      homeScore: 2,
-      awayScore: 2,
-      scoreText: "FT | 2:2",
-      isWon: true,
-    };
-  }
-
-  // Match: Mexico vs Peru (Playing Live: 90' H2 | 1:1, Live Odds 5.14)
-  if (title.includes("mexico") && title.includes("peru")) {
-    return {
-      status: "LIVE",
-      hasStarted: true,
-      minute: 90,
-      half: "H2",
-      homeScore: 1,
-      awayScore: 1,
-      scoreText: "90' H2 | 1:1",
-      liveOdds: 5.14,
-      isWon: false,
-    };
-  }
 
   // 1. Check matching adminMatch if present
   const am = adminMatches.find(
@@ -122,9 +159,20 @@ export function getLegLiveStatus(
 
   if (am) {
     const liveState = computeAdminMatchLiveState(am, now);
-    if (liveState.status === "FINISHED") {
-      const h = liveState.homeScore ?? 0;
-      const a = liveState.awayScore ?? 0;
+    const goals = getMatchGoalSchedule(
+      am.id,
+      liveState.targetHome,
+      liveState.targetAway,
+      am.homeTeam,
+      am.awayTeam,
+    );
+
+    // If simulated minute override is provided
+    let min = typeof simMinuteOverride === "number" ? Math.max(0, Math.min(90, simMinuteOverride)) : liveState.minute;
+
+    if (liveState.status === "FINISHED" || (typeof simMinuteOverride === "number" && simMinuteOverride >= 90)) {
+      const h = liveState.homeScore ?? liveState.targetHome;
+      const a = liveState.awayScore ?? liveState.targetAway;
       const won = isWinningSelection(s, h, a);
       return {
         status: won ? "WON" : "LOST",
@@ -135,25 +183,38 @@ export function getLegLiveStatus(
         awayScore: a,
         scoreText: `FT | ${h}:${a}`,
         isWon: won,
+        scheduledGoals: goals,
       };
     }
 
-    if (liveState.status === "LIVE") {
-      const h = liveState.homeScore ?? 0;
-      const a = liveState.awayScore ?? 0;
-      const min = liveState.minute ?? 1;
-      const half = min <= 45 ? "H1" : "H2";
-      const liveOdds = calculateLiveOdds(s.multiplier, min, h, a, s.optionLabel);
+    if (liveState.status === "LIVE" || (typeof simMinuteOverride === "number" && simMinuteOverride > 0)) {
+      const activeMin = min ?? 1;
+      let h = 0;
+      let a = 0;
+      let lastG: GoalEvent | undefined;
+      for (const g of goals) {
+        if (g.minute <= activeMin) {
+          if (g.team === "home") h++;
+          else a++;
+          lastG = g;
+        }
+      }
+
+      const half = activeMin <= 45 ? "H1" : "H2";
+      const liveOdds = calculateLiveOdds(s.multiplier, activeMin, h, a, s.optionLabel);
       return {
         status: "LIVE",
         hasStarted: true,
-        minute: min,
+        minute: activeMin,
         half,
         homeScore: h,
         awayScore: a,
-        scoreText: `${min}' ${half} | ${h}:${a}`,
+        scoreText: `${activeMin}' ${half} | ${h}:${a}`,
         liveOdds,
         isWon: false,
+        scheduledGoals: goals,
+        lastGoal: lastG,
+        isGoalJustScored: lastG ? lastG.minute === activeMin : false,
       };
     }
 
@@ -166,17 +227,115 @@ export function getLegLiveStatus(
       awayScore: 0,
       scoreText: s.kickoffTime || "Scheduled",
       isWon: false,
+      scheduledGoals: goals,
     };
   }
 
-  // 2. Check matching allMatch
+  // 2. Identify Target Goals for known or catalog matches
+  let goals: GoalEvent[] = [];
+  let defaultHomeScore = 1;
+  let defaultAwayScore = 1;
+
+  if (title.includes("aurora") && title.includes("bulo")) {
+    goals = AURORA_BULO_GOALS;
+    defaultHomeScore = 2;
+    defaultAwayScore = 2;
+  } else if (title.includes("mexico") && title.includes("peru")) {
+    goals = MEXICO_PERU_GOALS;
+    defaultHomeScore = 1;
+    defaultAwayScore = 1;
+  } else {
+    const m = allMatches.find((match) => match.id === s.matchId);
+    defaultHomeScore = m?.homeScore ?? 1;
+    defaultAwayScore = m?.awayScore ?? 0;
+    goals = getMatchGoalSchedule(
+      s.matchId || title,
+      defaultHomeScore,
+      defaultAwayScore,
+      title.split(" vs ")[0] || "Home",
+      title.split(" vs ")[1] || "Away",
+    );
+  }
+
+  // 3. Determine Minute & Kickoff
   const m = allMatches.find((match) => match.id === s.matchId);
   const kickoffStr = m?.kickoff || s.kickoffTime;
   const kickoffMs = kickoffStr ? new Date(kickoffStr).getTime() : NaN;
 
+  // Check if simulated minute override is provided
+  if (typeof simMinuteOverride === "number") {
+    const min = Math.max(0, Math.min(90, Math.round(simMinuteOverride)));
+
+    if (min === 0) {
+      return {
+        status: "UPCOMING",
+        hasStarted: false,
+        minute: 0,
+        half: "SCH",
+        homeScore: 0,
+        awayScore: 0,
+        scoreText: "Kickoff Soon",
+        isWon: false,
+        scheduledGoals: goals,
+      };
+    }
+
+    if (min >= 90) {
+      let h = 0;
+      let a = 0;
+      for (const g of goals) {
+        if (g.minute <= 90) {
+          if (g.team === "home") h++;
+          else a++;
+        }
+      }
+      const won = isWinningSelection(s, h, a);
+      return {
+        status: won ? "WON" : "LOST",
+        hasStarted: true,
+        minute: 90,
+        half: "FT",
+        homeScore: h,
+        awayScore: a,
+        scoreText: `FT | ${h}:${a}`,
+        isWon: won,
+        scheduledGoals: goals,
+      };
+    }
+
+    // Live in-progress during simulation
+    let h = 0;
+    let a = 0;
+    let lastG: GoalEvent | undefined;
+    for (const g of goals) {
+      if (g.minute <= min) {
+        if (g.team === "home") h++;
+        else a++;
+        lastG = g;
+      }
+    }
+    const half = min <= 45 ? "H1" : "H2";
+    const liveOdds = calculateLiveOdds(s.multiplier, min, h, a, s.optionLabel);
+
+    return {
+      status: "LIVE",
+      hasStarted: true,
+      minute: min,
+      half,
+      homeScore: h,
+      awayScore: a,
+      scoreText: `${min}' ${half} | ${h}:${a}`,
+      liveOdds,
+      isWon: false,
+      scheduledGoals: goals,
+      lastGoal: lastG,
+      isGoalJustScored: lastG ? lastG.minute === min : false,
+    };
+  }
+
+  // Real-world clock calculation from kickoffMs
   if (!isNaN(kickoffMs)) {
     if (now < kickoffMs) {
-      // Upcoming before kickoff
       const formattedTime = new Date(kickoffMs).toLocaleTimeString("en-GB", {
         hour: "2-digit",
         minute: "2-digit",
@@ -192,6 +351,7 @@ export function getLegLiveStatus(
         awayScore: 0,
         scoreText: formattedTime ? `Kickoff ${formattedTime}` : "Upcoming",
         isWon: false,
+        scheduledGoals: goals,
       };
     }
 
@@ -200,9 +360,14 @@ export function getLegLiveStatus(
     const durationMs = 95 * 60 * 1000;
 
     if (elapsedMs >= durationMs || m?.status === "FINISHED") {
-      // Completed Full Time
-      const h = m?.homeScore ?? 2;
-      const a = m?.awayScore ?? 1;
+      let h = 0;
+      let a = 0;
+      for (const g of goals) {
+        if (g.minute <= 90) {
+          if (g.team === "home") h++;
+          else a++;
+        }
+      }
       const won = isWinningSelection(s, h, a);
       return {
         status: won ? "WON" : "LOST",
@@ -213,14 +378,24 @@ export function getLegLiveStatus(
         awayScore: a,
         scoreText: `FT | ${h}:${a}`,
         isWon: won,
+        scheduledGoals: goals,
       };
     }
 
-    // Active Live Match
+    // Match is currently live! Tracks 1' to 90' as real time advances
     const min = Math.min(90, Math.max(1, Math.floor((elapsedMs / (90 * 60 * 1000)) * 90) + 1));
     const half = min <= 45 ? "H1" : "H2";
-    const h = m?.homeScore ?? (min > 30 ? 1 : 0);
-    const a = m?.awayScore ?? (min > 60 ? 1 : 0);
+
+    let h = 0;
+    let a = 0;
+    let lastG: GoalEvent | undefined;
+    for (const g of goals) {
+      if (g.minute <= min) {
+        if (g.team === "home") h++;
+        else a++;
+        lastG = g;
+      }
+    }
     const liveOdds = calculateLiveOdds(s.multiplier, min, h, a, s.optionLabel);
 
     return {
@@ -233,19 +408,38 @@ export function getLegLiveStatus(
       scoreText: `${min}' ${half} | ${h}:${a}`,
       liveOdds,
       isWon: false,
+      scheduledGoals: goals,
+      lastGoal: lastG,
+      isGoalJustScored: lastG ? lastG.minute === min : false,
     };
   }
 
-  // Fallback
+  // Fallback for sample reference matches
+  if (title.includes("aurora") && title.includes("bulo")) {
+    return {
+      status: "WON",
+      hasStarted: true,
+      minute: 90,
+      half: "FT",
+      homeScore: 2,
+      awayScore: 2,
+      scoreText: "FT | 2:2",
+      isWon: true,
+      scheduledGoals: AURORA_BULO_GOALS,
+    };
+  }
+
   return {
-    status: "UPCOMING",
-    hasStarted: false,
-    minute: 0,
-    half: "SCH",
-    homeScore: 0,
-    awayScore: 0,
-    scoreText: "Upcoming",
+    status: "LIVE",
+    hasStarted: true,
+    minute: 90,
+    half: "H2",
+    homeScore: 1,
+    awayScore: 1,
+    scoreText: "90' H2 | 1:1",
+    liveOdds: 5.14,
     isWon: false,
+    scheduledGoals: MEXICO_PERU_GOALS,
   };
 }
 
@@ -258,9 +452,10 @@ export function isAnyLegStarted(
   now = Date.now(),
   allMatches: Match[] = [],
   adminMatches: AdminMatch[] = [],
+  simMinuteOverride?: number,
 ): boolean {
   return selections.some(
-    (s) => getLegLiveStatus(s, now, allMatches, adminMatches).hasStarted,
+    (s) => getLegLiveStatus(s, now, allMatches, adminMatches, simMinuteOverride).hasStarted,
   );
 }
 

@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Trash2,
   Play,
+  Pause,
   Lock,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -107,10 +108,37 @@ function HistoryPage() {
     }
   };
 
+  // Interactive Live Match Simulation state for open bets (0' to 90' tracking with goals)
+  const [simActiveForCode, setSimActiveForCode] = useState<string | null>(null);
+  const [simMinute, setSimMinute] = useState<number>(90);
+  const [simIsPlaying, setSimIsPlaying] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!simIsPlaying || simActiveForCode === null) return;
+    const interval = setInterval(() => {
+      setSimMinute((prev) => {
+        if (prev >= 90) {
+          setSimIsPlaying(false);
+          return 90;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [simIsPlaying, simActiveForCode]);
+
   const handleSimulateMatch = (h: HistoryEntry) => {
-    toast.success(`Simulation active for bet ${h.code}`, {
-      description: "Match minutes and scores track live right from kickoff time.",
-    });
+    if (simActiveForCode === h.code) {
+      setSimActiveForCode(null);
+      setSimIsPlaying(false);
+      toast.info(`Closed live simulation for ${h.code}.`);
+    } else {
+      setSimActiveForCode(h.code);
+      setSimMinute(90);
+      toast.success(`Interactive match timeline opened for ${h.code}!`, {
+        description: "Scrub minutes 0' to 90' or hit Play to watch goals unfold live.",
+      });
+    }
   };
 
   const cashedOutCodes: Record<string, number> = {};
@@ -218,20 +246,22 @@ function HistoryPage() {
   const filteredOpenBets = useMemo(() => {
     if (subFilter === "cashout") {
       // Cashout is only available if no match has started yet
-      return openBets.filter(
-        (b) => !isAnyLegStarted(b.selections, now, allMatches, adminMatches),
-      );
+      return openBets.filter((b) => {
+        const simOverride = simActiveForCode === b.code ? simMinute : undefined;
+        return !isAnyLegStarted(b.selections, now, allMatches, adminMatches, simOverride);
+      });
     }
     if (subFilter === "live") {
       // Only bets with active matches in progress
-      return openBets.filter((b) =>
-        b.selections.some(
-          (s) => getLegLiveStatus(s, now, allMatches, adminMatches).status === "LIVE",
-        ),
-      );
+      return openBets.filter((b) => {
+        const simOverride = simActiveForCode === b.code ? simMinute : undefined;
+        return b.selections.some(
+          (s) => getLegLiveStatus(s, now, allMatches, adminMatches, simOverride).status === "LIVE",
+        );
+      });
     }
     return openBets;
-  }, [openBets, subFilter, now, allMatches, adminMatches]);
+  }, [openBets, subFilter, now, allMatches, adminMatches, simActiveForCode, simMinute]);
 
   // Cashout needs server-side pricing; until then no bet is ever marked cashout-available.
   const handleCashout = (code: string, _stake: number, _selectionsCount: number) => {
@@ -415,7 +445,8 @@ function HistoryPage() {
               {/* Ongoing Bet Cards */}
               <div className="space-y-3">
                 {filteredOpenBets.map((h) => {
-                  const anyStarted = isAnyLegStarted(h.selections, now, allMatches, adminMatches);
+                  const simOverride = simActiveForCode === h.code ? simMinute : undefined;
+                  const anyStarted = isAnyLegStarted(h.selections, now, allMatches, adminMatches, simOverride);
                   const isExpanded = expandedBetCodes[h.code] !== false;
 
                   return (
@@ -453,11 +484,16 @@ function HistoryPage() {
                           <button
                             type="button"
                             onClick={() => handleSimulateMatch(h)}
-                            className="flex items-center gap-1 text-xs font-bold text-[#22c55e] hover:brightness-125 transition-all cursor-pointer"
-                            title="Simulate Match Progress"
+                            className={cn(
+                              "flex items-center gap-1 text-xs font-bold transition-all cursor-pointer px-2 py-0.5 rounded",
+                              simActiveForCode === h.code
+                                ? "bg-amber-400 text-black shadow-xs font-black"
+                                : "text-[#22c55e] hover:brightness-125",
+                            )}
+                            title="Toggle 0' to 90' Match Timeline Simulation"
                           >
                             <CornerUpRight className="h-3 w-3" />
-                            <span>SIM</span>
+                            <span>SIM {simActiveForCode === h.code ? "ACTIVE" : ""}</span>
                           </button>
 
                           <button
@@ -472,6 +508,106 @@ function HistoryPage() {
                         </div>
                       </div>
 
+                      {/* Interactive 0' to 90' Match Timeline Simulator Bar */}
+                      {simActiveForCode === h.code && (
+                        <div className="bg-[#121620] border border-amber-400/40 rounded-xl p-3 space-y-2.5 animate-fadeIn">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-amber-400 flex items-center gap-1">
+                                <Play className="h-3 w-3 fill-amber-400" /> Match Timeline (0' - 90')
+                              </span>
+                              <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                {simMinute === 0
+                                  ? "0' Kickoff"
+                                  : simMinute >= 90
+                                    ? "90' Full Time"
+                                    : `${simMinute}' In-Play`}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSimIsPlaying(!simIsPlaying)}
+                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#22c55e]/20 text-[#22c55e] border border-[#22c55e]/40 hover:bg-[#22c55e]/30 flex items-center gap-1 cursor-pointer"
+                              >
+                                {simIsPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 fill-current" />}
+                                <span>{simIsPlaying ? "Pause" : "Play (1m/s)"}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSimActiveForCode(null);
+                                  setSimIsPlaying(false);
+                                }}
+                                className="text-gray-400 hover:text-white text-xs font-bold px-1.5 py-0.5 cursor-pointer"
+                                title="Close simulator"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Scrubber Slider */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] text-gray-400 font-bold px-0.5">
+                              <span>0' (Start)</span>
+                              <span>28' ⚽ Mexico</span>
+                              <span>45' HT</span>
+                              <span>71' ⚽ Peru</span>
+                              <span>90' FT</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={90}
+                              value={simMinute}
+                              onChange={(e) => setSimMinute(Number(e.target.value))}
+                              className="w-full accent-[#22c55e] h-2 bg-[#252c3b] rounded-lg cursor-pointer"
+                            />
+                          </div>
+
+                          {/* Jump Buttons */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => { setSimMinute(0); setSimIsPlaying(false); }}
+                              className="px-2 py-0.5 rounded bg-[#1c222e] border border-[#2d3748] text-gray-300 hover:text-white cursor-pointer"
+                            >
+                              0' Kickoff (Cashout Open)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSimMinute(28); setSimIsPlaying(false); }}
+                              className="px-2 py-0.5 rounded bg-[#1c222e] border border-[#2d3748] text-amber-300 hover:text-white cursor-pointer"
+                            >
+                              28' ⚽ Mexico Goal (1:0)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSimMinute(45); setSimIsPlaying(false); }}
+                              className="px-2 py-0.5 rounded bg-[#1c222e] border border-[#2d3748] text-gray-300 hover:text-white cursor-pointer"
+                            >
+                              45' Half Time
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSimMinute(71); setSimIsPlaying(false); }}
+                              className="px-2 py-0.5 rounded bg-[#1c222e] border border-[#2d3748] text-amber-300 hover:text-white cursor-pointer"
+                            >
+                              71' ⚽ Peru Goal (1:1)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setSimMinute(90); setSimIsPlaying(false); }}
+                              className="px-2 py-0.5 rounded bg-[#16a34a]/30 border border-[#16a34a] text-emerald-400 font-black hover:bg-[#16a34a]/40 cursor-pointer"
+                            >
+                              90' FT (Won ✔)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* CONDITIONAL BODY: EXPANDED vs COLLAPSED */}
                       {isExpanded ? (
                         /* ── EXPANDED STATE (Matches Reference Media) ── */
@@ -479,7 +615,7 @@ function HistoryPage() {
                           {/* Match Legs List */}
                           <div className="divide-y divide-[#232a39] border-t border-[#232a39]">
                             {h.selections.map((s, idx) => {
-                              const leg = getLegLiveStatus(s, now, allMatches, adminMatches);
+                              const leg = getLegLiveStatus(s, now, allMatches, adminMatches, simOverride);
 
                               return (
                                 <div key={idx} className="pt-3 pb-3 flex items-start gap-3">
@@ -527,12 +663,22 @@ function HistoryPage() {
 
                                     {/* Live status or FT outcome score below (Matches screenshot) */}
                                     {leg.status === "LIVE" ? (
-                                      <div className="text-xs font-semibold text-[#22c55e] flex items-center gap-1">
+                                      <div className="text-xs font-semibold text-[#22c55e] flex flex-wrap items-center gap-1.5">
                                         <span>{leg.scoreText}</span>
+                                        {leg.isGoalJustScored && (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-black bg-emerald-500/25 text-emerald-300 border border-emerald-400 px-1.5 py-0.2 rounded animate-bounce">
+                                            ⚽ GOAL! {leg.lastGoal?.scorer}
+                                          </span>
+                                        )}
                                       </div>
                                     ) : leg.isWon || leg.status === "WON" || leg.half === "FT" ? (
-                                      <div className="text-xs font-semibold text-gray-400">
-                                        {leg.scoreText}
+                                      <div className="text-xs font-semibold text-gray-400 flex items-center gap-2">
+                                        <span>{leg.scoreText}</span>
+                                        {leg.isWon && (
+                                          <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/15 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                                            Won Pick
+                                          </span>
+                                        )}
                                       </div>
                                     ) : (
                                       <div className="text-[11px] text-gray-400 font-mono">
