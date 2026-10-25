@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { GHANA_TZ } from "@/lib/ghana-time";
 import { HowToCashoutModal } from "@/components/common/HowToCashoutModal";
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
+import { TicketDetailsModal } from "@/components/common/TicketDetailsModal";
 import { fetchPublicSlipsFromBackend } from "@/services/backendSync";
 
 export const Route = createFileRoute("/history")({
@@ -119,9 +120,14 @@ function HistoryPage() {
     return history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
   }, [history, cashedOutCodes]);
 
+  const [selectedTicketForDetails, setSelectedTicketForDetails] = useState<HistoryEntry | null>(null);
+  const [deletedTicketCodes, setDeletedTicketCodes] = useState<Record<string, boolean>>({});
+
   // Settled History list — strictly actual user tickets from real history, NO dummy data
   const settledBets = useMemo(() => {
-    const userSettled = history.filter((h) => h.status !== "PENDING" || !!cashedOutCodes[h.code]);
+    const userSettled = history.filter(
+      (h) => !deletedTicketCodes[h.code] && (h.status !== "PENDING" || !!cashedOutCodes[h.code]),
+    );
     if (historyResultFilter === "Lost" || historyStatusFilter === "Lost") {
       return userSettled.filter((h) => h.status === "LOST");
     }
@@ -130,7 +136,7 @@ function HistoryPage() {
     }
     // By default: ONLY actual won tickets from real user betting history
     return userSettled.filter((h) => h.status === "WON");
-  }, [history, cashedOutCodes, historyStatusFilter, historyResultFilter]);
+  }, [history, cashedOutCodes, historyStatusFilter, historyResultFilter, deletedTicketCodes]);
 
   // Filtered settled bets — applies status, result, and date filters
   const filteredSettledBets = useMemo(() => {
@@ -987,33 +993,23 @@ function HistoryPage() {
                         return (
                           <div
                             key={h.code}
-                            className="rounded-xl border border-[#222938] bg-[#141822] overflow-hidden shadow-md hover:border-[#2f394c] transition-all"
+                            onClick={() => setSelectedTicketForDetails(h)}
+                            className="rounded-xl border border-[#222938] bg-[#141822] overflow-hidden shadow-md hover:border-[#2f394c] transition-all cursor-pointer group"
+                            title="Tap to view full Ticket Details"
                           >
                             {/* Card Header Banner (Solid Green for Won - Matches Screenshot) */}
                             {isWon ? (
-                              <div className="bg-[#00a859] px-3.5 py-2.5 flex items-center justify-between text-white shadow-xs">
+                              <div className="bg-[#00a859] px-3.5 py-2.5 flex items-center justify-between text-white shadow-xs group-hover:brightness-105 transition-all">
                                 <span className="font-extrabold text-sm tracking-wide">
                                   {h.selections.length > 1 ? "Multiple" : "Single"}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    showWinningCup({
-                                      code: h.code,
-                                      payout: h.payout,
-                                      potWin: h.potWin ?? h.payout,
-                                      matchTitle: h.matchTitle,
-                                      selections: h.selections,
-                                      stake: h.stake,
-                                    })
-                                  }
-                                  className="flex items-center gap-1.5 text-xs font-black text-white hover:brightness-110 active:scale-95 transition-all cursor-pointer py-0.5 px-1.5 rounded hover:bg-black/10"
-                                  title="View Winning Cup Trophy"
+                                <div
+                                  className="flex items-center gap-1.5 text-xs font-black text-white hover:brightness-110 active:scale-95 transition-all py-0.5 px-1.5 rounded hover:bg-black/10"
                                 >
                                   <Trophy className="h-3.5 w-3.5 text-white" />
                                   <span>Won</span>
                                   <ChevronRight className="h-4 w-4 stroke-[3]" />
-                                </button>
+                                </div>
                               </div>
                             ) : isRunning ? (
                               <div className="bg-[#172b20] border-b border-[#22c55e]/30 px-3.5 py-2.5 flex items-center justify-between text-white">
@@ -1094,7 +1090,10 @@ function HistoryPage() {
                                 {/* Remix Bet Button (Exact Match) */}
                                 <button
                                   type="button"
-                                  onClick={() => handleEditBet(h)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditBet(h);
+                                  }}
                                   className="shrink-0 bg-[#00a859] hover:bg-[#00914c] active:scale-95 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-md transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                                   title="Load selections into betslip to remix and place again"
                                 >
@@ -1155,6 +1154,27 @@ function HistoryPage() {
 
       {/* Payment Deposit Gateway modal */}
       <PaymentGatewayModal open={depositModalOpen} onOpenChange={setDepositModalOpen} />
+
+      {/* Full-Screen Ticket Details Modal matching attached user media */}
+      <TicketDetailsModal
+        isOpen={!!selectedTicketForDetails}
+        onClose={() => setSelectedTicketForDetails(null)}
+        ticket={selectedTicketForDetails}
+        onShowOff={(t) => {
+          showWinningCup({
+            code: t.code,
+            payout: t.payout,
+            potWin: t.potWin ?? t.payout,
+            matchTitle: t.matchTitle,
+            selections: t.selections,
+            stake: t.stake,
+          });
+        }}
+        onRemixBet={(t) => handleEditBet(t)}
+        onDeleteTicket={(code) => {
+          setDeletedTicketCodes((prev) => ({ ...prev, [code]: true }));
+        }}
+      />
     </div>
   );
 }
