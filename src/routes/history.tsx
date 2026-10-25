@@ -42,7 +42,6 @@ import { fetchPublicSlipsFromBackend } from "@/services/backendSync";
 import {
   getLegLiveStatus,
   isAnyLegStarted,
-  SAMPLE_LIVE_TICKET,
 } from "@/lib/matchTracking";
 
 export const Route = createFileRoute("/history")({
@@ -137,16 +136,15 @@ function HistoryPage() {
     }));
   };
 
-  // Open Bets list (status === 'PENDING' and not cashed out)
-  const openBets = useMemo(() => {
-    const userPending = history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
-    if (userPending.length > 0) return userPending;
-    // Show active live-tracking ticket (matching reference media) if user has no pending slip
-    return [SAMPLE_LIVE_TICKET];
-  }, [history, cashedOutCodes]);
-
   const [selectedTicketForDetails, setSelectedTicketForDetails] = useState<HistoryEntry | null>(null);
   const [deletedTicketCodes, setDeletedTicketCodes] = useState<Record<string, boolean>>({});
+
+  // Open Bets list — strictly actual user tickets from betting history, NO dummy data
+  const openBets = useMemo(() => {
+    return history.filter(
+      (h) => !deletedTicketCodes[h.code] && h.status === "PENDING" && !cashedOutCodes[h.code],
+    );
+  }, [history, cashedOutCodes, deletedTicketCodes]);
 
   // Settled History list — strictly actual user tickets from real history, NO dummy data
   const settledBets = useMemo(() => {
