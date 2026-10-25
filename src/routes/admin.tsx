@@ -138,11 +138,12 @@ function AdminPage() {
 
   useEffect(() => {
     if (!isAdmin) return;
+    refreshProfile();
     setLoadingProfiles(true);
     fetchAllProfilesFromBackend()
       .then(setSupabaseProfiles)
       .finally(() => setLoadingProfiles(false));
-  }, [isAdmin]);
+  }, [isAdmin, refreshProfile]);
 
   if (!authReady) {
     return (

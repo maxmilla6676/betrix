@@ -362,7 +362,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     setPartnersList(partners.partners);
     setPartnerDeposits(partners.partnerDeposits);
     setPartnerPayouts(partners.partnerPayouts);
-    if (role === "ADMIN") {
+    if ((role || "").toUpperCase() === "ADMIN") {
       const stats = await fetchPlatformStats();
       setPlatformTransactions(stats.transactions);
       setPlatformUserCount(stats.userCount);
@@ -895,7 +895,13 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Admin stats ──
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra" }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }, []);
   const platformDeposits = useMemo(
     () => platformTransactions.filter((t) => t.type === "DEPOSIT"),
     [platformTransactions],
@@ -903,7 +909,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   const todayRevenue = useMemo(
     () =>
       platformDeposits
-        .filter((t) => t.createdAt.slice(0, 10) === todayISO)
+        .filter((t) => (t.createdAt || "").slice(0, 10) === todayISO)
         .reduce((acc, t) => acc + t.amount, 0),
     [platformDeposits, todayISO],
   );
@@ -913,7 +919,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   );
   const getRevenueForDate = useCallback(
     (dateStr: string): DailyRevenueEntry => {
-      const day = platformDeposits.filter((t) => t.createdAt.slice(0, 10) === dateStr);
+      const day = platformDeposits.filter((t) => (t.createdAt || "").slice(0, 10) === dateStr);
       return {
         date: dateStr,
         totalRevenue: day.reduce((acc, t) => acc + t.amount, 0),

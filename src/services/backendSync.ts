@@ -14,6 +14,7 @@ import {
   type AdminLeague,
   type AdminMatch,
 } from "@/data/adminMatches";
+import { apiGet } from "@/services/seevplus";
 
 export { normalizePhone } from "@/lib/phone";
 
@@ -196,8 +197,21 @@ export async function markPartnerPaid(partnerId: string, note?: string) {
 
 /** Admin only: recent transactions across all users, and the member count. */
 export async function fetchPlatformStats() {
+  try {
+    const data = await apiGet<{ transactions: TransactionRecord[]; userCount: number }>("/api/admin/stats");
+    if (data && Array.isArray(data.transactions)) {
+      return data;
+    }
+  } catch {
+    // Fall back to direct Supabase query
+  }
+
   const [txRes, countRes] = await Promise.all([
-    supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(500),
+    supabase
+      .from("transactions")
+      .select("*")
+      .eq("type", "DEPOSIT")
+      .order("created_at", { ascending: false }),
     supabase.from("profiles").select("id", { count: "exact", head: true }),
   ]);
   return {

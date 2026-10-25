@@ -38,6 +38,27 @@ export async function apiPost<T = any>(path: string, body: unknown = {}): Promis
   return json as T;
 }
 
+export async function apiGet<T = any>(path: string): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method: "GET",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+  } catch {
+    throw new ApiError(0, "Network error. Check your connection and try again.", null);
+  }
+  const json: any = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiError(res.status, json?.error || `Request failed (${res.status})`, json);
+  }
+  return json as T;
+}
+
 export interface CheckoutResult {
   checkoutUrl: string;
   reference: string;
