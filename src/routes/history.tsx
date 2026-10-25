@@ -42,6 +42,7 @@ import { fetchPublicSlipsFromBackend } from "@/services/backendSync";
 import {
   getLegLiveStatus,
   isAnyLegStarted,
+  getInitialCashoutValue,
 } from "@/lib/matchTracking";
 
 export const Route = createFileRoute("/history")({
@@ -110,7 +111,7 @@ function HistoryPage() {
     // Pure simulation running in background, does not open UI
   };
 
-  const cashedOutCodes: Record<string, number> = {};
+  const [cashedOutCodes, setCashedOutCodes] = useState<Record<string, number>>({});
   const [codesAccordionOpen, setCodesAccordionOpen] = useState(true);
   const [expandedCodeIds, setExpandedCodeIds] = useState<Record<string, boolean>>({});
   const [cashoutModalOpen, setCashoutModalOpen] = useState(false);
@@ -229,9 +230,21 @@ function HistoryPage() {
     return openBets;
   }, [openBets, subFilter, now, allMatches, adminMatches]);
 
-  // Cashout needs server-side pricing; until then no bet is ever marked cashout-available.
-  const handleCashout = (code: string, _stake: number, _selectionsCount: number) => {
-    toast.info(`Cashout is not available for ${code} yet.`);
+  const handleCashout = (code: string, stake: number, _selectionsCount: number) => {
+    const bet = history.find((h) => h.code === code);
+    if (!bet) return;
+    const anyStarted = isAnyLegStarted(bet.selections, now, allMatches, adminMatches);
+    if (anyStarted) {
+      toast.error("Cashout is locked because a match is in progress.");
+      return;
+    }
+    const cashoutVal =
+      bet.cashoutValue && bet.cashoutValue < bet.stake
+        ? bet.cashoutValue
+        : getInitialCashoutValue(stake);
+
+    setCashedOutCodes((prev) => ({ ...prev, [code]: cashoutVal }));
+    toast.success(`Successfully cashed out ${code} for GHS ${cashoutVal.toFixed(2)}!`);
   };
 
   const handleCopyCode = (codeStr: string) => {
@@ -601,7 +614,7 @@ function HistoryPage() {
                                 onClick={() => handleCashout(h.code, h.stake, h.selections.length)}
                                 className="w-full bg-[#00a859] hover:bg-[#00914c] active:scale-98 text-white font-black text-sm py-3 rounded-xl shadow-md transition-all text-center cursor-pointer"
                               >
-                                Cashout GHS {(h.cashoutValue || h.stake * 1.65).toFixed(2)}
+                                Cashout GHS {(h.cashoutValue && h.cashoutValue < h.stake ? h.cashoutValue : getInitialCashoutValue(h.stake)).toFixed(2)}
                               </button>
                             )}
                           </div>
@@ -643,7 +656,7 @@ function HistoryPage() {
                                 >
                                   <div>Cash Out</div>
                                   <div className="font-mono font-black">
-                                    {formatGHS(h.cashoutValue || h.stake * 1.65)}
+                                    {formatGHS(h.cashoutValue && h.cashoutValue < h.stake ? h.cashoutValue : getInitialCashoutValue(h.stake))}
                                   </div>
                                 </button>
                               )}

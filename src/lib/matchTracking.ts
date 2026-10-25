@@ -137,6 +137,15 @@ export function getMatchGoalSchedule(
 }
 
 /**
+ * Calculates the initial cashout offer when a user stakes a bet.
+ * Strictly lesser than the stake (e.g. 90% sportsbook cashout offering).
+ */
+export function getInitialCashoutValue(stake: number): number {
+  if (!stake || stake <= 0) return 0;
+  return Math.round(stake * 0.90 * 100) / 100;
+}
+
+/**
  * Evaluates the real-time live match state of an open bet selection leg.
  * Tracks matches continuously from 0' to 90' right from kickoff time,
  * with goal events occurring at their scheduled minutes.
@@ -150,9 +159,8 @@ export function getLegLiveStatus(
 ): LegLiveStatus {
   const title = (s.matchTitle || "").toLowerCase();
 
-  // Reference matches from user media:
-  // 1. Club Aurora vs San Antonio Bulo Bulo (Completed FT 2:2, Won Pick with circular green checkmark)
-  if (title.includes("aurora") && title.includes("bulo")) {
+  // Reference matches from user media demo ticket:
+  if (s.matchId === "ft-aur-bul") {
     return {
       status: "WON",
       hasStarted: true,
@@ -166,8 +174,7 @@ export function getLegLiveStatus(
     };
   }
 
-  // 2. Mexico vs Peru (Playing Live: 90' H2 | 1:1, Live Odds 5.14, Play icon)
-  if (title.includes("mexico") && title.includes("peru")) {
+  if (s.matchId === "live-mex-per") {
     return {
       status: "LIVE",
       hasStarted: true,
@@ -446,32 +453,17 @@ export function getLegLiveStatus(
     };
   }
 
-  // Fallback for sample reference matches
-  if (title.includes("aurora") && title.includes("bulo")) {
-    return {
-      status: "WON",
-      hasStarted: true,
-      minute: 90,
-      half: "FT",
-      homeScore: 2,
-      awayScore: 2,
-      scoreText: "FT | 2:2",
-      isWon: true,
-      scheduledGoals: AURORA_BULO_GOALS,
-    };
-  }
-
+  // Default fallback for any upcoming match that has not started yet
   return {
-    status: "LIVE",
-    hasStarted: true,
-    minute: 90,
-    half: "H2",
-    homeScore: 1,
-    awayScore: 1,
-    scoreText: "90' H2 | 1:1",
-    liveOdds: 5.14,
+    status: "UPCOMING",
+    hasStarted: false,
+    minute: 0,
+    half: "SCH",
+    homeScore: 0,
+    awayScore: 0,
+    scoreText: s.kickoffTime || "Scheduled",
     isWon: false,
-    scheduledGoals: MEXICO_PERU_GOALS,
+    scheduledGoals: [],
   };
 }
 

@@ -137,6 +137,7 @@ export async function placeBet(user: AuthedUser, body: Record<string, unknown>) 
       p_match_title: matchTitle,
     });
     if (!error) {
+      const initialCashout = Math.round(stake * 0.90 * 100) / 100;
       return {
         balance: Number((data as any)?.balance ?? 0),
         entry: {
@@ -148,6 +149,8 @@ export async function placeBet(user: AuthedUser, body: Record<string, unknown>) 
           payout: 0,
           potWin,
           matchTitle,
+          cashoutAvailable: true,
+          cashoutValue: initialCashout,
         },
       };
     }
