@@ -62,12 +62,21 @@ function ProfilePage() {
   const isPhoneMatch = (a?: string, b?: string) =>
     Boolean(a && b && (a === b || normalizePhone(a) === normalizePhone(b)));
   const myPartner = partnersList.find((p) => isPhoneMatch(p.phone, profile.phone));
+  const isActualPartner = Boolean(
+    (myPartner && myPartner.status === "APPROVED") ||
+    profile.role === "PARTNER" ||
+    isAdmin
+  );
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
   const [withdrawNetwork, setWithdrawNetwork] = useState("MTN");
   const [withdrawing, setWithdrawing] = useState(false);
   const [showBalance, setShowBalance] = useState(true);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false);
+  const [responsibleGamingModalOpen, setResponsibleGamingModalOpen] = useState(false);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
 
   useEffect(() => {
     if (authReady && !isLoggedIn) {
@@ -225,7 +234,7 @@ function ProfilePage() {
 
         {/* Settings gear top right */}
         <button 
-          onClick={() => toast.info("Settings modal opened")}
+          onClick={() => setSettingsModalOpen(true)}
           className="p-2.5 rounded-2xl bg-[#1C1936] border border-[#2A264F] text-gray-300 hover:text-white hover:bg-[#252147] transition-all"
           title="Settings"
         >
@@ -377,7 +386,7 @@ function ProfilePage() {
           
           {/* Settings */}
           <button 
-            onClick={() => toast.info("Settings modal")}
+            onClick={() => setSettingsModalOpen(true)}
             className="w-full flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
           >
             <div className="flex items-center gap-3">
@@ -392,8 +401,8 @@ function ProfilePage() {
             <ChevronRight className="h-5 w-5 text-gray-500" />
           </button>
 
-          {/* Partner Row: Active, Pending Review, or Apply */}
-          {myPartner?.status === "APPROVED" || isAdmin ? (
+          {/* Partner Row: STRICTLY visible to actual approved partners only */}
+          {isActualPartner && (
             <Link
               to="/partners"
               className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
@@ -410,48 +419,6 @@ function ProfilePage() {
               <div className="flex items-center gap-2">
                 <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
                   ACTIVE PARTNER
-                </span>
-                <ChevronRight className="h-5 w-5 text-gray-500" />
-              </div>
-            </Link>
-          ) : myPartner?.status === "PENDING" ? (
-            <Link
-              to="/partners"
-              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
-                  <Clock className="h-5 w-5 text-amber-400 animate-pulse" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-white">Partner Application</p>
-                  <p className="text-xs font-medium text-amber-300">Under review by administrator</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="bg-amber-500/20 text-amber-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-amber-500/30">
-                  PENDING REVIEW
-                </span>
-                <ChevronRight className="h-5 w-5 text-gray-500" />
-              </div>
-            </Link>
-          ) : (
-            <Link
-              to="/partner-register"
-              className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left bg-gradient-to-r from-transparent to-[#F5C400]/5"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-2xl bg-[#F5C400]/10 border border-[#F5C400]/30 flex items-center justify-center shrink-0">
-                  <Handshake className="h-5 w-5 text-[#F5C400]" />
-                </div>
-                <div>
-                  <p className="text-sm font-black text-white">Become a BETRIX Partner</p>
-                  <p className="text-xs font-medium text-gray-400">Earn lifetime commission on user deposits</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#F5C400]/20 text-[#F5C400] text-[10px] font-black px-2 py-0.5 rounded-full uppercase border border-[#F5C400]/30">
-                  APPLY
                 </span>
                 <ChevronRight className="h-5 w-5 text-gray-500" />
               </div>
@@ -483,9 +450,10 @@ function ProfilePage() {
           )}
 
           {/* Help & Support */}
-          <Link 
-            to="/partners"
-            className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+          <button 
+            type="button"
+            onClick={() => setHelpModalOpen(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
           >
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-[#06B6D4] flex items-center justify-center shrink-0">
@@ -502,10 +470,11 @@ function ProfilePage() {
               </span>
               <ChevronRight className="h-5 w-5 text-gray-500" />
             </div>
-          </Link>
+          </button>
 
           {/* Live Chat */}
           <button 
+            type="button"
             onClick={() => toast.success("Connected to 24/7 Agent Live Chat!")}
             className="w-full flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
           >
@@ -527,9 +496,10 @@ function ProfilePage() {
           </button>
 
           {/* Responsible Gaming */}
-          <Link 
-            to="/partners"
-            className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+          <button 
+            type="button"
+            onClick={() => setResponsibleGamingModalOpen(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
           >
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-[#EF4444] flex items-center justify-center shrink-0">
@@ -541,12 +511,13 @@ function ProfilePage() {
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-500" />
-          </Link>
+          </button>
 
           {/* Terms & Conditions */}
-          <Link 
-            to="/partners"
-            className="flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
+          <button 
+            type="button"
+            onClick={() => setTermsModalOpen(true)}
+            className="w-full flex items-center justify-between p-4 hover:bg-[#221F45] transition-colors text-left"
           >
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-2xl bg-[#64748B] flex items-center justify-center shrink-0">
@@ -558,7 +529,7 @@ function ProfilePage() {
               </div>
             </div>
             <ChevronRight className="h-5 w-5 text-gray-500" />
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -589,6 +560,139 @@ function ProfilePage() {
         </p>
       </div>
 
+      {/* ── SETTINGS MODAL ── */}
+      <Dialog open={settingsModalOpen} onOpenChange={setSettingsModalOpen}>
+        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-5 shadow-2xl">
+          <DialogHeader className="text-left border-b border-[#2A264F] pb-3">
+            <DialogTitle className="flex items-center gap-2 text-white font-black text-lg">
+              <Settings className="h-5 w-5 text-[#F5C400]" /> App Settings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2 text-xs">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[#252147] border border-[#332E5E]">
+              <div>
+                <p className="font-bold text-white">Odds Format</p>
+                <p className="text-[11px] text-gray-400">Decimal (e.g. 2.50)</p>
+              </div>
+              <span className="font-mono font-black text-[#F5C400]">Decimal</span>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[#252147] border border-[#332E5E]">
+              <div>
+                <p className="font-bold text-white">Bet Confirmations</p>
+                <p className="text-[11px] text-gray-400">Prompt before placing slip</p>
+              </div>
+              <span className="font-bold text-emerald-400">Enabled</span>
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-xl bg-[#252147] border border-[#332E5E]">
+              <div>
+                <p className="font-bold text-white">Theme & Display</p>
+                <p className="text-[11px] text-gray-400">AMOLED Dark Gaming Theme</p>
+              </div>
+              <span className="font-bold text-[#F5C400]">Dark</span>
+            </div>
+            <Button
+              onClick={() => setSettingsModalOpen(false)}
+              className="w-full bg-[#F5C400] text-black font-black text-xs h-10 rounded-xl"
+            >
+              Done
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── HELP & SUPPORT MODAL ── */}
+      <Dialog open={helpModalOpen} onOpenChange={setHelpModalOpen}>
+        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-5 shadow-2xl">
+          <DialogHeader className="text-left border-b border-[#2A264F] pb-3">
+            <DialogTitle className="flex items-center gap-2 text-white font-black text-lg">
+              <HelpCircle className="h-5 w-5 text-[#06B6D4]" /> 24/7 Help & Support
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2 text-xs">
+            <div className="p-3 rounded-xl bg-[#252147] border border-[#332E5E] space-y-1">
+              <p className="font-black text-white text-sm">Customer Care Helpline</p>
+              <p className="text-gray-300 font-mono font-bold">+233 24 000 0000 · Toll-Free</p>
+              <p className="text-[10px] text-gray-400">Available 24 hours a day, 7 days a week.</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[#252147] border border-[#332E5E] space-y-1">
+              <p className="font-black text-white text-sm">Official WhatsApp Desk</p>
+              <p className="text-emerald-400 font-mono font-bold">+233 55 123 4567</p>
+              <p className="text-[10px] text-gray-400">Instant chat responses for deposits and slips.</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[#252147] border border-[#332E5E] space-y-1">
+              <p className="font-black text-white text-sm">Email Support</p>
+              <p className="text-cyan-300 font-mono font-bold">support@betrix.com</p>
+            </div>
+            <Button
+              onClick={() => setHelpModalOpen(false)}
+              className="w-full bg-[#06B6D4] text-black font-black text-xs h-10 rounded-xl mt-2"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── RESPONSIBLE GAMING MODAL ── */}
+      <Dialog open={responsibleGamingModalOpen} onOpenChange={setResponsibleGamingModalOpen}>
+        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-5 shadow-2xl">
+          <DialogHeader className="text-left border-b border-[#2A264F] pb-3">
+            <DialogTitle className="flex items-center gap-2 text-white font-black text-lg">
+              <ShieldCheck className="h-5 w-5 text-[#EF4444]" /> Responsible Gaming
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2 text-xs">
+            <p className="text-gray-300 leading-relaxed">
+              BETRIX is committed to safe and responsible entertainment. Betting should remain fun and within your personal financial limits.
+            </p>
+            <div className="p-3 rounded-xl bg-[#252147] border border-[#332E5E] space-y-1.5">
+              <p className="font-bold text-amber-400">Strict 18+ Age Policy</p>
+              <p className="text-[11px] text-gray-400">Underage gambling is strictly prohibited under Ghanaian law.</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[#252147] border border-[#332E5E] space-y-1.5">
+              <p className="font-bold text-white">Self-Exclusion & Limits</p>
+              <p className="text-[11px] text-gray-400">Contact our 24/7 support line anytime to request deposit caps, cooling-off periods, or account self-exclusion.</p>
+            </div>
+            <Button
+              onClick={() => setResponsibleGamingModalOpen(false)}
+              className="w-full bg-[#EF4444] text-white font-black text-xs h-10 rounded-xl mt-2"
+            >
+              I Understand
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── TERMS & CONDITIONS MODAL ── */}
+      <Dialog open={termsModalOpen} onOpenChange={setTermsModalOpen}>
+        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader className="text-left border-b border-[#2A264F] pb-3">
+            <DialogTitle className="flex items-center gap-2 text-white font-black text-lg">
+              <FileText className="h-5 w-5 text-[#F5C400]" /> Terms & Conditions
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2 text-xs leading-relaxed text-gray-300">
+            <p className="font-bold text-white">1. Regulatory License</p>
+            <p className="text-[11px] text-gray-400">
+              BETRIX is licensed and fully regulated by the Gaming Commission of Ghana under Licence No. GCG/CAS/0265.
+            </p>
+            <p className="font-bold text-white">2. Sports Settlement & Odds</p>
+            <p className="text-[11px] text-gray-400">
+              All sports fixtures are settled strictly upon official 90-minute regular play results from verified sporting authorities.
+            </p>
+            <p className="font-bold text-white">3. Payouts & Cashouts</p>
+            <p className="text-[11px] text-gray-400">
+              Cashout values are dynamic and lock automatically once fixtures commence. Winnings are directly deposited to your verified mobile money wallet.
+            </p>
+            <Button
+              onClick={() => setTermsModalOpen(false)}
+              className="w-full bg-[#F5C400] text-black font-black text-xs h-10 rounded-xl mt-2"
+            >
+              Close Terms
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

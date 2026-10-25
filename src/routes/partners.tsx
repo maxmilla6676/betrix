@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useSearch } from "@tanstack/react-router";
-import { Check, Clock, Copy, Users2, Wallet, XCircle, Share2, Send, ExternalLink } from "lucide-react";
+import { Check, Clock, Copy, Users2, Wallet, XCircle, Share2, Send, ExternalLink, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
@@ -84,12 +84,12 @@ export function PartnersPage() {
     p.phone === profile.phone ||
     Boolean(p.phone && profile.phone && normalizePhone(p.phone) === normalizePhone(profile.phone));
 
-  // Non-admins only receive their own partner row (RLS); admins can switch between partners.
+  // Non-admins only receive their own approved partner record; never fall back to other partners for random users!
   const partner = isAdmin
     ? partnersList.find((p) => p.id === selectedId) ||
       partnersList.find((p) => p.status === "APPROVED") ||
       partnersList[0]
-    : partnersList.find(isPhoneMatch) || partnersList[0];
+    : partnersList.find((p) => isPhoneMatch(p) && p.status === "APPROVED");
 
   const deposits = useMemo(
     () =>
@@ -113,31 +113,35 @@ export function PartnersPage() {
 
   if (!partner) {
     return (
-      <div className="mx-auto max-w-md space-y-3 p-6 text-center">
-        <h1 className="text-xl font-black text-white">Partner Dashboard</h1>
+      <div className="mx-auto max-w-md space-y-4 p-8 text-center mt-12 bg-[#1C1936] border border-[#2A264F] rounded-3xl shadow-xl">
+        <div className="h-14 w-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+          <Lock className="h-7 w-7" />
+        </div>
+        <h1 className="text-xl font-black text-white">Partner Portal Restricted</h1>
         <p className="text-sm text-gray-400">
           {!authReady
-            ? "Loading…"
+            ? "Verifying partner authorization…"
             : isLoggedIn
-              ? "No partner account is linked to your phone number yet."
-              : "Log in with the phone number you used on your partner application to see your dashboard."}
+              ? "The Partner Dashboard is strictly reserved for verified BETRIX partners. Your account is not registered as an active partner."
+              : "Please log in with your authorized partner account credentials to access the Partner Dashboard."}
         </p>
-        {isLoggedIn ? (
+        <div className="pt-2 flex justify-center gap-3">
           <Link
-            to="/partner-register"
-            className="inline-block rounded-xl bg-[#F5C400] px-4 py-2 text-xs font-black text-black"
+            to="/"
+            className="inline-block rounded-xl bg-[#F5C400] px-5 py-2.5 text-xs font-black text-black hover:bg-[#e0b024] transition-colors"
           >
-            Apply to become a partner
+            Back to Sports
           </Link>
-        ) : (
-          <Link
-            to="/auth"
-            search={{ redirect: "/partners" }}
-            className="inline-block rounded-xl bg-[#F5C400] px-4 py-2 text-xs font-black text-black"
-          >
-            Log in
-          </Link>
-        )}
+          {!isLoggedIn && (
+            <Link
+              to="/auth"
+              search={{ redirect: "/partners" }}
+              className="inline-block rounded-xl bg-[#2A264F] px-5 py-2.5 text-xs font-black text-white hover:bg-[#342f61] transition-colors"
+            >
+              Log In
+            </Link>
+          )}
+        </div>
       </div>
     );
   }

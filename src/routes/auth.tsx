@@ -339,9 +339,17 @@ function AuthPage() {
                   <input type="checkbox" id="terms" required className="mt-0.5 accent-[#F5C400]" />
                   <label htmlFor="terms" className="cursor-pointer">
                     I confirm that I am at least 18 years old and agree to the{" "}
-                    <Link to="/partners" className="text-[#F5C400] font-bold hover:underline">
+                    <span
+                      onClick={() =>
+                        toast.info(
+                          "BETRIX Terms & Conditions: Licensed by Gaming Commission of Ghana (GCG/CAS/0265). Players must be 18+.",
+                        )
+                      }
+                      className="text-[#F5C400] font-bold hover:underline cursor-pointer"
+                    >
                       Terms & Conditions
-                    </Link>.
+                    </span>
+                    .
                   </label>
                 </div>
 
