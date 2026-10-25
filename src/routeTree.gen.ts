@@ -28,6 +28,7 @@ import { Route as ApiEspnRouteImport } from './routes/api/espn'
 import { Route as LeaguesIndexRouteImport } from './routes/leagues.index'
 import { Route as LeaguesSlugRouteImport } from './routes/leagues.$slug'
 import { Route as MatchMatchIdRouteImport } from './routes/match.$matchId'
+import { Route as ApiAuthLinkReferralRouteImport } from './routes/api/auth/link-referral'
 import { Route as ApiAuthMigrateRouteImport } from './routes/api/auth/migrate'
 import { Route as ApiAuthRegisterRouteImport } from './routes/api/auth/register'
 import { Route as ApiBetsBookRouteImport } from './routes/api/bets/book'
@@ -135,6 +136,11 @@ const MatchMatchIdRoute = MatchMatchIdRouteImport.update({
   path: '/match/$matchId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthLinkReferralRoute = ApiAuthLinkReferralRouteImport.update({
+  id: '/api/auth/link-referral',
+  path: '/api/auth/link-referral',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthMigrateRoute = ApiAuthMigrateRouteImport.update({
   id: '/api/auth/migrate',
   path: '/api/auth/migrate',
@@ -211,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues/': typeof LeaguesIndexRoute
+  '/api/auth/link-referral': typeof ApiAuthLinkReferralRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/book': typeof ApiBetsBookRoute
@@ -243,6 +250,7 @@ export interface FileRoutesByTo {
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues': typeof LeaguesIndexRoute
+  '/api/auth/link-referral': typeof ApiAuthLinkReferralRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/book': typeof ApiBetsBookRoute
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/leagues/$slug': typeof LeaguesSlugRoute
   '/match/$matchId': typeof MatchMatchIdRoute
   '/leagues/': typeof LeaguesIndexRoute
+  '/api/auth/link-referral': typeof ApiAuthLinkReferralRoute
   '/api/auth/migrate': typeof ApiAuthMigrateRoute
   '/api/auth/register': typeof ApiAuthRegisterRoute
   '/api/bets/book': typeof ApiBetsBookRoute
@@ -310,6 +319,7 @@ export interface FileRouteTypes {
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues/'
+    | '/api/auth/link-referral'
     | '/api/auth/migrate'
     | '/api/auth/register'
     | '/api/bets/book'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues'
+    | '/api/auth/link-referral'
     | '/api/auth/migrate'
     | '/api/auth/register'
     | '/api/bets/book'
@@ -374,6 +385,7 @@ export interface FileRouteTypes {
     | '/leagues/$slug'
     | '/match/$matchId'
     | '/leagues/'
+    | '/api/auth/link-referral'
     | '/api/auth/migrate'
     | '/api/auth/register'
     | '/api/bets/book'
@@ -407,6 +419,7 @@ export interface RootRouteChildren {
   LeaguesSlugRoute: typeof LeaguesSlugRoute
   MatchMatchIdRoute: typeof MatchMatchIdRoute
   LeaguesIndexRoute: typeof LeaguesIndexRoute
+  ApiAuthLinkReferralRoute: typeof ApiAuthLinkReferralRoute
   ApiAuthMigrateRoute: typeof ApiAuthMigrateRoute
   ApiAuthRegisterRoute: typeof ApiAuthRegisterRoute
   ApiBetsBookRoute: typeof ApiBetsBookRoute
@@ -555,6 +568,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MatchMatchIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/link-referral': {
+      id: '/api/auth/link-referral'
+      path: '/api/auth/link-referral'
+      fullPath: '/api/auth/link-referral'
+      preLoaderRoute: typeof ApiAuthLinkReferralRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/migrate': {
       id: '/api/auth/migrate'
       path: '/api/auth/migrate'
@@ -655,6 +675,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaguesSlugRoute: LeaguesSlugRoute,
   MatchMatchIdRoute: MatchMatchIdRoute,
   LeaguesIndexRoute: LeaguesIndexRoute,
+  ApiAuthLinkReferralRoute: ApiAuthLinkReferralRoute,
   ApiAuthMigrateRoute: ApiAuthMigrateRoute,
   ApiAuthRegisterRoute: ApiAuthRegisterRoute,
   ApiBetsBookRoute: ApiBetsBookRoute,

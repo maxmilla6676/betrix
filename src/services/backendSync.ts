@@ -77,6 +77,7 @@ export interface OwnProfile {
   balance: number;
   verified: boolean;
   memberSince: string;
+  referredBy?: string | null;
 }
 
 /**
@@ -90,7 +91,7 @@ export async function fetchOwnProfile(): Promise<OwnProfile | null> {
   if (!phone) return null;
   const { data, error } = await supabase
     .from("profiles")
-    .select("user_id, phone, tier, role, balance, verified, created_at")
+    .select("user_id, phone, tier, role, balance, verified, created_at, referred_by")
     .eq("phone", phone)
     .maybeSingle();
   if (error || !data) return null;
@@ -102,6 +103,7 @@ export async function fetchOwnProfile(): Promise<OwnProfile | null> {
     balance: Number(data.balance ?? 0),
     verified: !!data.verified,
     memberSince: new Date(data.created_at || Date.now()).getFullYear().toString(),
+    referredBy: data.referred_by ?? null,
   };
 }
 

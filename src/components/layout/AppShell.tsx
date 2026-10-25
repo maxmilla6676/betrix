@@ -15,6 +15,8 @@ import { SlipContent } from "@/components/slip/PredictionSlip";
 import { WinningCupCelebrationModal } from "@/components/common/WinningCupModal";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
+import { captureReferralFromUrl, getStoredReferralCode } from "@/lib/referral";
+import { linkUserReferral } from "@/services/seevplus";
 
 const mobileNav = [
   { to: "/", label: "Home", icon: HomeIcon },
@@ -26,8 +28,28 @@ const mobileNav = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { slip, isLoggedIn, profile, winningCelebration, closeWinningCup, showWinningCup } = useBetrix();
+  const { slip, isLoggedIn, profile, refreshProfile, winningCelebration, closeWinningCup, showWinningCup } = useBetrix();
   const [slipOpen, setSlipOpen] = useState(false);
+
+  // Capture partner referral parameter from URL on any page load or route transition
+  useEffect(() => {
+    captureReferralFromUrl();
+  }, [pathname]);
+
+  // If user is logged in but has no partner attribution yet, link with stored referral code
+  useEffect(() => {
+    if (!isLoggedIn || !profile?.phone || profile?.referredBy) return;
+    const storedRef = getStoredReferralCode();
+    if (storedRef) {
+      linkUserReferral(storedRef)
+        .then((res) => {
+          if (res?.ok && res?.linked) {
+            void refreshProfile();
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isLoggedIn, profile?.phone, profile?.referredBy, refreshProfile]);
 
   useEffect(() => {
     (window as unknown as { __showWinningCup?: (payout?: number) => void }).__showWinningCup = (payout = 5394.17) => {
@@ -99,7 +121,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </Link>
                   <Link
                     to="/auth"
-                    search={{ mode: "signup" } as any}
+                    search={{ mode: "signup", ref: getStoredReferralCode() || undefined } as any}
                     className="bg-[#F5C400] text-black font-black text-xs tracking-wider rounded-md px-3.5 py-1.5 shadow hover:bg-[#e0b300] active:scale-95 transition-all whitespace-nowrap"
                   >
                     Register

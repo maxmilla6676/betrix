@@ -92,7 +92,18 @@ export function PartnersPage() {
     : partnersList.find(isPhoneMatch) || partnersList[0];
 
   const deposits = useMemo(
-    () => (partner ? partnerDeposits.filter((d) => d.partnerId === partner.id) : []),
+    () =>
+      partner
+        ? partnerDeposits.filter(
+            (d) =>
+              d.partnerId === partner.id ||
+              Boolean(
+                d.partnerCode &&
+                  partner.code &&
+                  d.partnerCode.trim().toUpperCase() === partner.code.trim().toUpperCase(),
+              ),
+          )
+        : [],
     [partnerDeposits, partner],
   );
   const payouts = useMemo(
@@ -131,7 +142,12 @@ export function PartnersPage() {
     );
   }
 
-  const { totalDeposits, rate, earned, paidOut, unpaid } = partnerEarnings(partner);
+  const depositsSum = deposits.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+  const effectiveTotalDeposits = Math.max(Number(partner.totalDeposits || 0), depositsSum);
+  const { totalDeposits, rate, earned, paidOut, unpaid } = partnerEarnings({
+    ...partner,
+    totalDeposits: effectiveTotalDeposits,
+  });
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const link = `${origin}/auth?mode=signup&ref=${partner.code}`;
 

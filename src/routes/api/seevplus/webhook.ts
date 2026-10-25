@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { handle, json } from "@/server/http";
 import { adminDb } from "@/server/db";
 import { verifyWebhookSignature } from "@/server/seev";
+import { ensurePartnerDepositAttributed } from "@/server/payments";
 
 /**
  * SeevPlus webhook (payment.succeeded / payment.failed).
@@ -50,6 +51,7 @@ export const Route = createFileRoute("/api/seevplus/webhook")({
             console.error("[webhook] credit failed", intent.reference, error.message);
             return json({ error: "Could not record payment" }, 500);
           }
+          await ensurePartnerDepositAttributed(intent.reference, Number(tx.amount));
         } else if (event === "payment.failed") {
           await db
             .from("payment_intents")

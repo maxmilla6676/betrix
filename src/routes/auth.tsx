@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, Lock, Phone, Shield, Eye, EyeOff, X, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BetrixLogo } from "@/components/brand/Logo";
 import { useBetrix } from "@/store/betrix";
 import { cn } from "@/lib/utils";
+import { getStoredReferralCode, storeReferralCode } from "@/lib/referral";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -22,8 +23,19 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { login, register } = useBetrix();
-  const search = useSearch({ strict: false }) as { mode?: string; redirect?: string; ref?: string };
-  const defaultTab = search?.mode === "signup" || search?.ref ? "signup" : "signin";
+  const search = useSearch({ strict: false }) as {
+    mode?: string;
+    redirect?: string;
+    ref?: string;
+    referral?: string;
+  };
+
+  // Check URL query first, then fallback to persistent storage (cookie/localStorage/sessionStorage)
+  const queryRef = (search?.ref || search?.referral || "").trim().toUpperCase();
+  const storedRef = (typeof window !== "undefined" ? getStoredReferralCode() || "" : "").trim().toUpperCase();
+  const linkedReferral = queryRef || storedRef;
+
+  const defaultTab = search?.mode === "signup" || linkedReferral ? "signup" : "signin";
 
   const [tab, setTab] = useState<"signin" | "signup">(defaultTab);
   const [loading, setLoading] = useState<null | "signin" | "signup">(null);
@@ -34,10 +46,16 @@ function AuthPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  // A code that arrived via a partner's link is fixed: the user can't clear or change it.
-  const linkedReferral = (search?.ref || "").trim().toUpperCase();
+
   const [referralCode, setReferralCode] = useState(linkedReferral);
-  const effectiveReferral = linkedReferral || referralCode.trim();
+  const effectiveReferral = linkedReferral || referralCode.trim().toUpperCase();
+
+  // If a referral code was passed via URL, ensure it is persisted
+  useEffect(() => {
+    if (queryRef) {
+      storeReferralCode(queryRef);
+    }
+  }, [queryRef]);
 
   const handleSubmit = (mode: "signin" | "signup") => async (e: React.FormEvent) => {
     e.preventDefault();

@@ -95,6 +95,7 @@ export interface Profile {
   memberSince: string;
   status: string;
   nextUpdateDate: string;
+  referredBy?: string | null;
 }
 
 export interface TransactionRecord {

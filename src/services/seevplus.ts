@@ -3,6 +3,7 @@
  * access token; the server decides balances, odds and payment outcomes.
  */
 import { supabase } from "@/integrations/supabase/client";
+import { getStoredReferralCode } from "@/lib/referral";
 
 export class ApiError extends Error {
   constructor(
@@ -43,8 +44,21 @@ export interface CheckoutResult {
   orderId: string;
 }
 
-export const startSeevCheckout = (amount: number) =>
-  apiPost<CheckoutResult>("/api/seevplus/checkout", { amount });
+export const startSeevCheckout = (amount: number, referralCode?: string) =>
+  apiPost<CheckoutResult>("/api/seevplus/checkout", {
+    amount,
+    referralCode: referralCode || getStoredReferralCode() || undefined,
+  });
+
+export const linkUserReferral = (referralCode: string) =>
+  apiPost<{
+    ok: boolean;
+    linked?: boolean;
+    alreadyLinked?: boolean;
+    partnerCode?: string;
+    partnerName?: string;
+    error?: string;
+  }>("/api/auth/link-referral", { referralCode });
 
 export interface VerifyResult {
   status: "PENDING" | "CREDITED" | "FAILED";

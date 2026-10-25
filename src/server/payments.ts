@@ -58,6 +58,41 @@ export async function startDeposit(
     throw err;
   }
 
+  // Link partner referral code if user is not yet attributed
+  const incomingRef = String(
+    body["referralCode"] || body["code"] || body["ref"] || body["referral"] || "",
+  )
+    .trim()
+    .toUpperCase();
+  if (incomingRef) {
+    const { data: profile } = await adminDb()
+      .from("profiles")
+      .select("id, referred_by")
+      .eq("id", user.profileId)
+      .maybeSingle();
+
+    if (profile && !profile.referred_by) {
+      const cleanRef = incomingRef.replace(/^BTX-/, "");
+      const { data: partner } = await adminDb()
+        .from("partners")
+        .select("id, code, signups")
+        .or(`code.ilike.${incomingRef},code.ilike.${cleanRef},code.ilike.BTX-${cleanRef}`)
+        .eq("status", "APPROVED")
+        .maybeSingle();
+
+      if (partner) {
+        await adminDb()
+          .from("profiles")
+          .update({ referred_by: partner.code, updated_at: new Date().toISOString() })
+          .eq("id", user.profileId);
+        await adminDb()
+          .from("partners")
+          .update({ signups: (partner.signups || 0) + 1 })
+          .eq("id", partner.id);
+      }
+    }
+  }
+
   const { error } = await adminDb().from("payment_intents").insert({
     reference: session.reference,
     order_id: orderId,
@@ -74,6 +109,101 @@ export async function startDeposit(
 function amountMatches(raw: number | undefined, expectedGhs: number) {
   if (raw === undefined) return true;
   return Math.abs(raw / 100 - expectedGhs) < 0.01 || Math.abs(raw - expectedGhs) < 0.01;
+}
+
+/**
+ * Ensures partner attribution and commission are recorded for a successful deposit.
+ * Serves as a reliable safety net if credit_deposit's exact partner code lookup skipped it.
+ */
+export async function ensurePartnerDepositAttributed(reference: string, amountGhs: number) {
+  try {
+    const db = adminDb();
+    const depositRecordId = `PD-${reference}`;
+
+    // 1. If already recorded, nothing more to do
+    const { data: existingDeposit } = await db
+      .from("partner_deposits")
+      .select("id")
+      .eq("id", depositRecordId)
+      .maybeSingle();
+
+    if (existingDeposit) return;
+
+    // 2. Fetch payment intent to get profile_id and phone
+    const { data: intent } = await db
+      .from("payment_intents")
+      .select("profile_id, phone")
+      .eq("reference", reference)
+      .maybeSingle();
+
+    if (!intent?.profile_id) return;
+
+    // 3. Fetch user profile
+    const { data: profile } = await db
+      .from("profiles")
+      .select("id, phone, referred_by, has_deposited")
+      .eq("id", intent.profile_id)
+      .maybeSingle();
+
+    if (!profile?.referred_by) return;
+
+    const rawRef = profile.referred_by.trim().toUpperCase();
+    const cleanRef = rawRef.replace(/^BTX-/, "");
+
+    // 4. Find approved partner
+    const { data: partner } = await db
+      .from("partners")
+      .select("id, code, commission_rate, total_deposits, earnings, active_users")
+      .or(`code.ilike.${rawRef},code.ilike.${cleanRef},code.ilike.BTX-${cleanRef}`)
+      .eq("status", "APPROVED")
+      .maybeSingle();
+
+    if (!partner) return;
+
+    const rate = partner.commission_rate || 0;
+    const commission = Math.round(((amountGhs * rate) / 100) * 100) / 100;
+    const phone = profile.phone || intent.phone || "";
+    const maskedPhone =
+      phone.length >= 7 ? `${phone.slice(0, 3)}***${phone.slice(-4)}` : phone;
+
+    // 5. Insert partner deposit record
+    const { error: insertErr } = await db.from("partner_deposits").insert({
+      id: depositRecordId,
+      partner_id: partner.id,
+      partner_code: partner.code,
+      user_phone: maskedPhone,
+      amount: amountGhs,
+      commission_earned: commission,
+      status: "Completed",
+    });
+
+    if (insertErr && !insertErr.message?.includes("duplicate")) {
+      console.error("[partner_deposit] insert failed:", insertErr.message);
+    }
+
+    // 6. Update partner stats
+    const newTotalDeposits =
+      Math.round(((partner.total_deposits || 0) + amountGhs) * 100) / 100;
+    const newEarnings = Math.round(((partner.earnings || 0) + commission) * 100) / 100;
+    const newActiveUsers = (partner.active_users || 0) + (profile.has_deposited ? 0 : 1);
+
+    await db
+      .from("partners")
+      .update({
+        total_deposits: newTotalDeposits,
+        earnings: newEarnings,
+        active_users: newActiveUsers,
+      })
+      .eq("id", partner.id);
+
+    // 7. Mark user as having deposited
+    await db.from("profiles").update({ has_deposited: true }).eq("id", profile.id);
+    console.log(
+      `[partner_deposit] attributed ${amountGhs} GHS to partner ${partner.code} (${partner.id})`,
+    );
+  } catch (err) {
+    console.error("[partner_deposit] error attributing deposit:", err);
+  }
 }
 
 /** Credit an intent once SeevPlus confirms it. Safe to call repeatedly. */
@@ -96,6 +226,7 @@ export async function confirmIntent(intent: {
       p_amount: amount,
     });
     if (error) throw dbError(error);
+    await ensurePartnerDepositAttributed(intent.reference, amount);
     return "CREDITED";
   }
   if (payment.status === "failed") {
