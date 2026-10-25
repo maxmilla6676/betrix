@@ -26,6 +26,8 @@ import {
   Trophy,
   ChevronRight,
   Trash2,
+  Play,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,11 @@ import { HowToCashoutModal } from "@/components/common/HowToCashoutModal";
 import { PaymentGatewayModal } from "@/components/payment/PaymentGatewayModal";
 import { TicketDetailsModal } from "@/components/common/TicketDetailsModal";
 import { fetchPublicSlipsFromBackend } from "@/services/backendSync";
+import {
+  getLegLiveStatus,
+  isAnyLegStarted,
+  SAMPLE_LIVE_TICKET,
+} from "@/lib/matchTracking";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -59,8 +66,16 @@ function HistoryPage() {
     balance,
     loadSlip,
     showWinningCup,
+    allMatches,
+    adminMatches,
   } = useBetrix();
 
+  // Real-time ticking clock so match minutes and scores track live
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 2000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Top Tabs: 'open' | 'history'
   const [mainTab, setMainTab] = useState<"open" | "history">("open");
@@ -85,11 +100,17 @@ function HistoryPage() {
     if (h.selections && h.selections.length > 0) {
       loadSlip(h.selections);
       toast.success(`${h.selections.length} selections from bet ${h.code} loaded into your betslip!`, {
-        description: "Review and adjust your stake, then place again.",
+        description: "Review and adjust your selections or stake, then place again.",
       });
     } else {
       toast.info("No selections found for this bet.");
     }
+  };
+
+  const handleSimulateMatch = (h: HistoryEntry) => {
+    toast.success(`Simulation active for bet ${h.code}`, {
+      description: "Match minutes and scores track live right from kickoff time.",
+    });
   };
 
   const cashedOutCodes: Record<string, number> = {};
@@ -108,16 +129,22 @@ function HistoryPage() {
       setLoadingCommunitySlips(false);
     });
   }, []);
-  const [showAutoCashoutBanner, setShowAutoCashoutBanner] = useState(true);
+
   const [expandedBetCodes, setExpandedBetCodes] = useState<Record<string, boolean>>({});
 
   const toggleExpandBet = (code: string) => {
-    setExpandedBetCodes((prev) => ({ ...prev, [code]: !prev[code] }));
+    setExpandedBetCodes((prev) => ({
+      ...prev,
+      [code]: prev[code] === undefined ? false : !prev[code],
+    }));
   };
 
   // Open Bets list (status === 'PENDING' and not cashed out)
   const openBets = useMemo(() => {
-    return history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
+    const userPending = history.filter((h) => h.status === "PENDING" && !cashedOutCodes[h.code]);
+    if (userPending.length > 0) return userPending;
+    // Show active live-tracking ticket (matching reference media) if user has no pending slip
+    return [SAMPLE_LIVE_TICKET];
   }, [history, cashedOutCodes]);
 
   const [selectedTicketForDetails, setSelectedTicketForDetails] = useState<HistoryEntry | null>(null);
@@ -190,13 +217,21 @@ function HistoryPage() {
   // Filtered open bets based on sub-filter
   const filteredOpenBets = useMemo(() => {
     if (subFilter === "cashout") {
-      return openBets.filter((b) => b.cashoutAvailable === true);
+      // Cashout is only available if no match has started yet
+      return openBets.filter(
+        (b) => !isAnyLegStarted(b.selections, now, allMatches, adminMatches),
+      );
     }
     if (subFilter === "live") {
-      return openBets.filter((b) => b.isLive === true);
+      // Only bets with active matches in progress
+      return openBets.filter((b) =>
+        b.selections.some(
+          (s) => getLegLiveStatus(s, now, allMatches, adminMatches).status === "LIVE",
+        ),
+      );
     }
     return openBets;
-  }, [openBets, subFilter]);
+  }, [openBets, subFilter, now, allMatches, adminMatches]);
 
   // Cashout needs server-side pricing; until then no bet is ever marked cashout-available.
   const handleCashout = (code: string, _stake: number, _selectionsCount: number) => {
@@ -377,47 +412,18 @@ function HistoryPage() {
             /* ONGOING MULTIPLE GAMES VIEW (Exact Match to User Screenshot) */
             /* ========================================================= */
             <div className="space-y-3">
-              {/* Dismissible Banner: "Set a rule to Auto Cashout your bet. (i)" */}
-              {showAutoCashoutBanner && (
-                <div className="bg-[#181d26] border border-[#262f3e] rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-gray-300 shadow-sm animate-in fade-in-50">
-                  <div className="flex items-center gap-1.5">
-                    <span>
-                      Set a rule to <strong className="text-white font-extrabold">Auto Cashout</strong> your bet.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCashoutModalOpen(true)}
-                      className="text-gray-400 hover:text-white"
-                      title="Learn about Auto Cashout"
-                    >
-                      <Info className="h-3.5 w-3.5 ml-0.5 inline" />
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowAutoCashoutBanner(false)}
-                    className="text-gray-400 hover:text-white p-0.5 rounded transition-colors"
-                    title="Dismiss"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
               {/* Ongoing Bet Cards */}
               <div className="space-y-3">
                 {filteredOpenBets.map((h) => {
-                  const cashoutVal = Math.round(h.stake * 1.65);
-                  const isAvailable = h.cashoutAvailable === true;
-                  const isExpanded = !!expandedBetCodes[h.code];
+                  const anyStarted = isAnyLegStarted(h.selections, now, allMatches, adminMatches);
+                  const isExpanded = expandedBetCodes[h.code] !== false;
 
                   return (
                     <div
                       key={h.code}
                       className="bg-[#181d26] border border-[#262f3e] rounded-xl p-4 space-y-3 shadow-md hover:border-[#333d4e] transition-all"
                     >
-                      {/* Top Row: [ Multiple ] [ Live ] ... [ Rebet ] [ SIM ] [ Share ] */}
+                      {/* Top Row: [ Multiple ] [ Live ] ... [ Rebet ] [ SIM ] [ Edit Bet ] */}
                       <div className="flex items-center justify-between">
                         <div
                           className="flex items-center gap-2 cursor-pointer"
@@ -426,9 +432,11 @@ function HistoryPage() {
                           <span className="font-black text-sm text-white tracking-wide">
                             Multiple
                           </span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-[#15803d]/30 text-[#22c55e] border border-[#22c55e]/30">
-                            Live
-                          </span>
+                          {anyStarted && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-[#15803d]/30 text-[#22c55e] border border-[#22c55e]/30">
+                              Live
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-3">
@@ -444,52 +452,97 @@ function HistoryPage() {
 
                           <button
                             type="button"
-                            onClick={() => handleShareBet(h)}
-                            className="text-[#22c55e] hover:scale-110 transition-transform cursor-pointer"
-                            title="Share Bet"
+                            onClick={() => handleSimulateMatch(h)}
+                            className="flex items-center gap-1 text-xs font-bold text-[#22c55e] hover:brightness-125 transition-all cursor-pointer"
+                            title="Simulate Match Progress"
                           >
-                            <Share2 className="h-4 w-4" />
+                            <CornerUpRight className="h-3 w-3" />
+                            <span>SIM</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleEditBet(h)}
+                            className="flex items-center gap-1 text-xs font-bold text-[#22c55e] hover:brightness-125 transition-all cursor-pointer"
+                            title="Edit Bet"
+                          >
+                            <Share2 className="h-3.5 w-3.5" />
+                            <span>Edit Bet</span>
                           </button>
                         </div>
                       </div>
 
                       {/* CONDITIONAL BODY: EXPANDED vs COLLAPSED */}
                       {isExpanded ? (
-                        /* ── EXPANDED STATE (Exact Match to User Screenshot) ── */
+                        /* ── EXPANDED STATE (Matches Reference Media) ── */
                         <div className="space-y-3 pt-1">
                           {/* Match Legs List */}
                           <div className="divide-y divide-[#232a39] border-t border-[#232a39]">
-                            {h.selections.map((s, idx) => (
-                              <div key={idx} className="pt-3 pb-2.5 flex items-start gap-3">
-                                {/* Left: Clock Icon in circle */}
-                                <div className="h-5 w-5 rounded-full border border-gray-500/80 flex items-center justify-center shrink-0 mt-0.5">
-                                  <Clock className="h-3 w-3 text-gray-300" />
+                            {h.selections.map((s, idx) => {
+                              const leg = getLegLiveStatus(s, now, allMatches, adminMatches);
+
+                              return (
+                                <div key={idx} className="pt-3 pb-3 flex items-start gap-3">
+                                  {/* Left: Indicator (Circular green checkmark if won, play button in circle if live, clock if upcoming) */}
+                                  {leg.isWon ? (
+                                    <div className="h-5 w-5 rounded-full bg-[#16a34a] flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                                      <Check className="h-3.5 w-3.5 text-white stroke-[3]" />
+                                    </div>
+                                  ) : leg.status === "LIVE" ? (
+                                    <div className="h-5 w-5 rounded-full border border-gray-400 bg-black/40 flex items-center justify-center shrink-0 mt-0.5 relative">
+                                      <Play className="h-2.5 w-2.5 text-white fill-white ml-0.5" />
+                                      <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                    </div>
+                                  ) : (
+                                    <div className="h-5 w-5 rounded-full border border-gray-500/80 flex items-center justify-center shrink-0 mt-0.5">
+                                      <Clock className="h-3 w-3 text-gray-400" />
+                                    </div>
+                                  )}
+
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    {/* Pick & Odds + Market */}
+                                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                      <span className="text-sm">⚽</span>
+                                      <span className="font-extrabold text-white text-[13px]">
+                                        {s.optionLabel} @ {s.multiplier.toFixed(2)}
+                                      </span>
+                                      <span className="text-gray-300 font-bold text-xs">
+                                        {s.marketName}
+                                      </span>
+                                    </div>
+
+                                    {/* Live Odds Badge (Only shown when match is LIVE, matching screenshot) */}
+                                    {leg.status === "LIVE" && (
+                                      <div className="pt-0.5">
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold bg-[#16a34a]/15 text-[#22c55e] border border-[#22c55e]/25">
+                                          Live Odds {leg.liveOdds ? leg.liveOdds.toFixed(2) : (s.multiplier * 0.6).toFixed(2)}
+                                        </span>
+                                      </div>
+                                    )}
+
+                                    {/* Match Teams (Underlined link style) */}
+                                    <div className="text-xs text-gray-200 underline underline-offset-2 decoration-gray-500 font-semibold truncate hover:text-white cursor-pointer pt-0.5">
+                                      {s.matchTitle || "Match Details"}
+                                    </div>
+
+                                    {/* Live status or FT outcome score below (Matches screenshot) */}
+                                    {leg.status === "LIVE" ? (
+                                      <div className="text-xs font-semibold text-[#22c55e] flex items-center gap-1">
+                                        <span>{leg.scoreText}</span>
+                                      </div>
+                                    ) : leg.isWon || leg.status === "WON" || leg.half === "FT" ? (
+                                      <div className="text-xs font-semibold text-gray-400">
+                                        {leg.scoreText}
+                                      </div>
+                                    ) : (
+                                      <div className="text-[11px] text-gray-400 font-mono">
+                                        {s.kickoffTime || "Upcoming"}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-
-                                <div className="flex-1 min-w-0 space-y-1">
-                                  {/* Pick & Odds + Market */}
-                                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                    <span className="text-sm">⚽</span>
-                                    <span className="font-extrabold text-white">
-                                      {s.optionLabel} @ {s.multiplier.toFixed(2)}
-                                    </span>
-                                    <span className="text-gray-400 font-medium">
-                                      {s.marketName}
-                                    </span>
-                                  </div>
-
-                                  {/* Match Teams (Underlined link style) */}
-                                  <div className="text-xs text-gray-200 underline underline-offset-2 decoration-gray-500 font-semibold truncate hover:text-white cursor-pointer">
-                                    {s.matchTitle || "Match Details"}
-                                  </div>
-
-                                  {/* Kickoff Date & Time */}
-                                  <div className="text-[11px] text-gray-400 font-mono">
-                                    {s.kickoffTime || "18/10 14:30"}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
 
                           {/* Hide Match Details link */}
@@ -509,40 +562,41 @@ function HistoryPage() {
                             <div className="flex items-center justify-between">
                               <span className="text-gray-400 font-medium">Stake</span>
                               <span className="font-mono font-black text-white text-sm">
-                                {h.stake.toFixed(2)}
+                                {h.stake.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-gray-400 font-medium">Pot. Win</span>
                               <span className="font-mono font-black text-white text-sm">
-                                {(h.potWin || h.stake * 3.5).toFixed(2)}
+                                {(h.potWin || h.stake * 3.5).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </span>
                             </div>
                           </div>
 
-                          {/* Full-width Cashout Action Button */}
+                          {/* Full-width Cashout Action Button (Locked when match starts!) */}
                           <div className="pt-2">
-                            {isAvailable ? (
-                              <button
-                                type="button"
-                                onClick={() => handleCashout(h.code, h.stake, h.selections.length)}
-                                className="w-full bg-[#00a859] hover:bg-[#00914c] active:scale-98 text-white font-black text-sm py-3 rounded-lg shadow-md transition-all text-center cursor-pointer"
-                              >
-                                Cashout GHS {(h.cashoutValue || h.stake).toFixed(2)}
-                              </button>
-                            ) : (
+                            {anyStarted ? (
                               <div className="space-y-1">
                                 <button
                                   type="button"
                                   disabled
-                                  className="w-full bg-[#313948] text-gray-300 font-black text-sm py-3 rounded-lg border border-[#3e485b] cursor-not-allowed text-center select-none"
+                                  className="w-full bg-[#1c222e] border border-[#2b3545] text-gray-400 font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2 cursor-not-allowed select-none transition-colors"
                                 >
-                                  Cashout Unavailable
+                                  <Lock className="w-4 h-4 text-amber-400/90" />
+                                  <span>Cashout Locked (Match in Progress)</span>
                                 </button>
-                                <p className="text-[10px] text-gray-400 font-medium text-center">
-                                  Cashout is temporarily unavailable for this bet
+                                <p className="text-[10px] text-gray-500 font-medium text-center">
+                                  Cashout is locked while matches are in progress
                                 </p>
                               </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleCashout(h.code, h.stake, h.selections.length)}
+                                className="w-full bg-[#00a859] hover:bg-[#00914c] active:scale-98 text-white font-black text-sm py-3 rounded-xl shadow-md transition-all text-center cursor-pointer"
+                              >
+                                Cashout GHS {(h.cashoutValue || h.stake * 1.65).toFixed(2)}
+                              </button>
                             )}
                           </div>
                         </div>
@@ -555,19 +609,24 @@ function HistoryPage() {
                           >
                             <div className="space-y-1">
                               <h4 className="text-sm md:text-base font-black text-white tracking-tight">
-                                {h.matchTitle || "Udinese vs Lecce"}
+                                {h.matchTitle || "Multiple Games"}
                               </h4>
                               <p className="text-xs text-gray-400">
                                 Stake{" "}
                                 <strong className="text-white font-mono font-black text-sm ml-1">
-                                  {h.stake.toFixed(2)}
+                                  {h.stake.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </strong>
                               </p>
                             </div>
 
                             {/* Right: Cashout Status / Action Button */}
                             <div className="flex flex-col items-end shrink-0">
-                              {isAvailable ? (
+                              {anyStarted ? (
+                                <div className="flex items-center gap-1.5 bg-[#1b202c] border border-[#273244] text-gray-400 text-xs font-bold px-3 py-1.5 rounded-lg select-none">
+                                  <Lock className="w-3.5 h-3.5 text-amber-400/90" />
+                                  <span>Locked</span>
+                                </div>
+                              ) : (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -578,24 +637,15 @@ function HistoryPage() {
                                 >
                                   <div>Cash Out</div>
                                   <div className="font-mono font-black">
-                                    {formatGHS(h.cashoutValue || cashoutVal)}
+                                    {formatGHS(h.cashoutValue || h.stake * 1.65)}
                                   </div>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled
-                                  className="bg-[#313948] text-gray-300 font-bold text-xs px-5 py-2 rounded-lg border border-[#3e485b] text-center leading-tight min-w-[125px] cursor-not-allowed select-none"
-                                >
-                                  <div>Cashout</div>
-                                  <div>Unavailable</div>
                                 </button>
                               )}
 
                               <span className="text-[10px] text-gray-400 font-medium text-right mt-1">
-                                {isAvailable
-                                  ? "Cashout is available now!"
-                                  : "Cashout is temporarily unavailable for this bet"}
+                                {anyStarted
+                                  ? "Match in progress"
+                                  : "Cashout is available now!"}
                               </span>
                             </div>
                           </div>
@@ -617,6 +667,42 @@ function HistoryPage() {
                   );
                 })}
               </div>
+
+              {/* Subfilter Empty States */}
+              {filteredOpenBets.length === 0 && subFilter === "cashout" && (
+                <div className="bg-[#181d26] border border-[#262f3e] rounded-xl p-8 text-center space-y-2">
+                  <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <h3 className="font-black text-sm text-white">No Cashout Available Right Now</h3>
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                    Cashout locks automatically once matches kick off. Cashout is available for bets placed on upcoming scheduled fixtures before kickoff.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSubFilter("all")}
+                    className="mt-2 text-xs font-bold text-[#F5C400] hover:underline cursor-pointer"
+                  >
+                    View All Open Bets ›
+                  </button>
+                </div>
+              )}
+
+              {filteredOpenBets.length === 0 && subFilter === "live" && (
+                <div className="bg-[#181d26] border border-[#262f3e] rounded-xl p-8 text-center space-y-2">
+                  <h3 className="font-black text-sm text-white">No Live Games In Progress</h3>
+                  <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                    Your bets with upcoming matches will appear here as soon as they kick off at the scheduled time.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSubFilter("all")}
+                    className="mt-2 text-xs font-bold text-[#F5C400] hover:underline cursor-pointer"
+                  >
+                    View All Open Bets ›
+                  </button>
+                </div>
+              )}
 
               {/* Quick switch helper bar */}
               <div className="flex items-center justify-between pt-4 border-t border-[#202735] text-xs">
