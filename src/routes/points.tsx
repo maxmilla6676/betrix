@@ -29,10 +29,17 @@ const TX_LABELS: Record<string, string> = {
   REFUND: "Refund",
 };
 
+/** Poll schedule after returning from SeevPlus: fast at first (MoMo approval), then slower. ~8 min total. */
+const POLL_DELAYS_MS = [...Array(12).fill(4000), ...Array(12).fill(10000), ...Array(10).fill(20000)];
+/** "failed" can flip to paid if the payer retries the prompt on the same checkout, so confirm it a few times. */
+const FAILED_CONFIRMATIONS = 4;
+
 /** After SeevPlus redirects back, ask the server to confirm the payment (it polls SeevPlus). */
 function useDepositReturn() {
   const { isLoggedIn, verifyDeposit } = useBetrix();
   const [state, setState] = useState<"idle" | "checking" | "credited" | "failed" | "pending">("idle");
+  const [runId, setRunId] = useState(0);
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined" || !isLoggedIn) return;
@@ -45,51 +52,74 @@ function useDepositReturn() {
         orderId = null;
       }
     }
+    if (!orderId) orderId = lastOrderId;
     if (!orderId) return;
+    setLastOrderId(orderId);
     window.history.replaceState({}, document.title, window.location.pathname);
 
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let attempts = 0;
+    let failedCount = 0;
     setState("checking");
     const check = async () => {
       if (cancelled) return;
-      attempts++;
       try {
         const res = await verifyDeposit({ orderId: orderId! });
+        if (cancelled) return;
         if (res.status === "CREDITED") {
-          sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
+          try {
+            sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
+          } catch {
+            /* ignore */
+          }
           setState("credited");
           toast.success(`Payment confirmed — GHS ${res.amount.toFixed(2)} added to your wallet.`);
           return;
         }
         if (res.status === "FAILED") {
-          sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
-          setState("failed");
-          toast.error("The payment was not completed. No money was taken.");
-          return;
+          failedCount++;
+          if (failedCount >= FAILED_CONFIRMATIONS) {
+            try {
+              sessionStorage.removeItem(PENDING_DEPOSIT_KEY);
+            } catch {
+              /* ignore */
+            }
+            setState("failed");
+            toast.error("The payment was not completed. If money left your wallet, tap Check again.");
+            return;
+          }
+        } else {
+          failedCount = 0;
         }
       } catch {
         /* transient: keep polling */
       }
-      if (attempts < 20) {
-        setTimeout(check, 5000);
+      if (cancelled) return;
+      const delay = POLL_DELAYS_MS[attempts++];
+      if (delay !== undefined) {
+        timer = setTimeout(check, delay);
       } else {
+        // Still unconfirmed: the app keeps re-checking in the background (store refreshWallet).
         setState("pending");
       }
     };
     check();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [isLoggedIn, verifyDeposit]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn, verifyDeposit, runId]);
 
-  return state;
+  const recheck = () => setRunId((n) => n + 1);
+  return { state, recheck, canRecheck: !!lastOrderId };
 }
 
 function WalletPage() {
   const { balance, history, transactions } = useBetrix();
   const [depositOpen, setDepositOpen] = useState(false);
-  const depositState = useDepositReturn();
+  const { state: depositState, recheck, canRecheck } = useDepositReturn();
 
   const staked = history.reduce((a, h) => a + h.stake, 0);
   const won = history.reduce((a, h) => a + h.payout, 0);
@@ -112,9 +142,25 @@ function WalletPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Confirming your payment with SeevPlus…
         </div>
       )}
-      {depositState === "pending" && (
-        <div role="status" className="rounded-2xl border border-[#2A264F] bg-[#1C1936] p-3 text-xs text-gray-300">
-          Your payment is still processing. Your balance will update automatically once SeevPlus confirms it.
+      {(depositState === "pending" || depositState === "failed") && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-2xl border border-[#2A264F] bg-[#1C1936] p-3 text-xs text-gray-300"
+        >
+          <span>
+            {depositState === "pending"
+              ? "Your payment is still processing. Your balance updates automatically once SeevPlus confirms it."
+              : "We couldn't confirm this payment yet. If you approved it on your phone, tap Check again."}
+          </span>
+          {canRecheck && (
+            <Button
+              size="sm"
+              onClick={recheck}
+              className="shrink-0 bg-[#F5C400] hover:bg-[#e0b300] text-black font-black text-[11px] rounded-lg"
+            >
+              Check again
+            </Button>
+          )}
         </div>
       )}
 

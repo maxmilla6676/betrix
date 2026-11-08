@@ -65,9 +65,17 @@ export interface CheckoutResult {
   orderId: string;
 }
 
-export const startSeevCheckout = (amount: number, referralCode?: string) =>
+export interface PayerDetails {
+  /** The payer's full name, shown by SeevPlus instead of a BETRIX placeholder. */
+  name: string;
+  email?: string;
+}
+
+export const startSeevCheckout = (amount: number, payer: PayerDetails, referralCode?: string) =>
   apiPost<CheckoutResult>("/api/seevplus/checkout", {
     amount,
+    name: payer.name,
+    email: payer.email || undefined,
     referralCode: referralCode || getStoredReferralCode() || undefined,
   });
 

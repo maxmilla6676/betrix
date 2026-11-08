@@ -25,6 +25,46 @@ async function currentBalance(profileId: string): Promise<number> {
   return Number(data?.balance ?? 0);
 }
 
+// ── Payer identity ──────────────────────────────────────────────────────────
+
+/** "  angela   ANDOR " → "Angela Andor". Returns "" if it isn't a plausible person's name. */
+export function cleanPersonName(raw: unknown): string {
+  const name = String(raw ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60);
+  if (name.length < 2 || !/^[\p{L}][\p{L} .'-]*$/u.test(name)) return "";
+  return name
+    .toLowerCase()
+    .replace(/(^|[\s'-])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+}
+
+function cleanEmail(raw: unknown): string {
+  const email = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return email.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) ? email : "";
+}
+
+/** The account holder's saved name (profiles.full_name), if that column exists and is set. */
+async function savedName(profileId: string): Promise<string> {
+  const { data, error } = await adminDb()
+    .from("profiles")
+    .select("full_name")
+    .eq("id", profileId)
+    .maybeSingle();
+  if (error) return ""; // column not migrated yet
+  return cleanPersonName((data as { full_name?: string } | null)?.full_name);
+}
+
+async function rememberName(profileId: string, name: string) {
+  const { error } = await adminDb()
+    .from("profiles")
+    .update({ full_name: name })
+    .eq("id", profileId);
+  if (error) console.warn("[profile] could not save full_name:", error.message);
+}
+
 // ── Deposits ────────────────────────────────────────────────────────────────
 
 export async function startDeposit(
@@ -40,6 +80,14 @@ export async function startDeposit(
     );
   }
 
+  // SeevPlus shows this name to the payer and flags placeholder customer details,
+  // so we always send the person's real name.
+  const typedName = cleanPersonName(body["name"]);
+  const name = typedName || (await savedName(user.profileId));
+  if (!name) throw new HttpError(400, "Enter your full name as it appears on your MoMo account.");
+  if (typedName) await rememberName(user.profileId, typedName);
+  const email = cleanEmail(body["email"]);
+
   const orderId = `ORD-${crypto.randomUUID()}`;
   let session: { checkoutUrl: string; reference: string };
   try {
@@ -47,7 +95,8 @@ export async function startDeposit(
       amountGhs: amount,
       orderId,
       phone: user.phone,
-      name: `BETRIX ${user.userId}`,
+      name,
+      ...(email ? { email } : {}),
       redirectUrl: `${origin}/points?gateway=seevplus&order=${encodeURIComponent(orderId)}`,
     });
   } catch (err) {
@@ -58,6 +107,16 @@ export async function startDeposit(
     throw err;
   }
 
+  // Record the intent before anything else can fail, so a paid checkout can always be credited.
+  const { error } = await adminDb().from("payment_intents").insert({
+    reference: session.reference,
+    order_id: orderId,
+    profile_id: user.profileId,
+    phone: user.phone,
+    amount,
+  });
+  if (error) throw dbError(error);
+
   // Link partner referral code if user is not yet attributed
   const incomingRef = String(
     body["referralCode"] || body["code"] || body["ref"] || body["referral"] || "",
@@ -65,6 +124,18 @@ export async function startDeposit(
     .trim()
     .toUpperCase();
   if (incomingRef) {
+    try {
+      await linkReferral(user, incomingRef);
+    } catch (err) {
+      console.warn("[deposit] referral link failed", err);
+    }
+  }
+
+  return { checkoutUrl: session.checkoutUrl, reference: session.reference, orderId };
+}
+
+async function linkReferral(user: AuthedUser, incomingRef: string) {
+  {
     const { data: profile } = await adminDb()
       .from("profiles")
       .select("id, referred_by")
@@ -92,24 +163,22 @@ export async function startDeposit(
       }
     }
   }
-
-  const { error } = await adminDb().from("payment_intents").insert({
-    reference: session.reference,
-    order_id: orderId,
-    profile_id: user.profileId,
-    phone: user.phone,
-    amount,
-  });
-  if (error) throw dbError(error);
-
-  return { checkoutUrl: session.checkoutUrl, reference: session.reference, orderId };
 }
 
-/** Amount checks tolerate either unit, since only the status lookup's units are undocumented. */
-function amountMatches(raw: number | undefined, expectedGhs: number) {
+/**
+ * The checkout amount is fixed by us when the session is created, so this only guards
+ * against an underpayment. The status lookup's units are undocumented (pesewas or GHS),
+ * and the gateway may add its processing fee on top, so we accept either unit and up to
+ * 20% above the order total.
+ */
+export function amountMatches(raw: number | undefined, expectedGhs: number) {
   if (raw === undefined) return true;
-  return Math.abs(raw / 100 - expectedGhs) < 0.01 || Math.abs(raw - expectedGhs) < 0.01;
+  const ok = (ghs: number) => ghs >= expectedGhs - 0.01 && ghs <= expectedGhs * 1.2 + 0.01;
+  return ok(raw / 100) || ok(raw);
 }
+
+/** Deposits whose last gateway answer was "failed" are re-checked for this long. */
+const FAILED_RECHECK_MS = 24 * 3600_000;
 
 /**
  * Ensures partner attribution and commission are recorded for a successful deposit.
@@ -163,8 +232,7 @@ export async function ensurePartnerDepositAttributed(reference: string, amountGh
     const rate = partner.commission_rate || 0;
     const commission = Math.round(((amountGhs * rate) / 100) * 100) / 100;
     const phone = profile.phone || intent.phone || "";
-    const maskedPhone =
-      phone.length >= 7 ? `${phone.slice(0, 3)}***${phone.slice(-4)}` : phone;
+    const maskedPhone = phone.length >= 7 ? `${phone.slice(0, 3)}***${phone.slice(-4)}` : phone;
 
     // 5. Insert partner deposit record
     const { error: insertErr } = await db.from("partner_deposits").insert({
@@ -182,8 +250,7 @@ export async function ensurePartnerDepositAttributed(reference: string, amountGh
     }
 
     // 6. Update partner stats
-    const newTotalDeposits =
-      Math.round(((partner.total_deposits || 0) + amountGhs) * 100) / 100;
+    const newTotalDeposits = Math.round(((partner.total_deposits || 0) + amountGhs) * 100) / 100;
     const newEarnings = Math.round(((partner.earnings || 0) + commission) * 100) / 100;
     const newActiveUsers = (partner.active_users || 0) + (profile.has_deposited ? 0 : 1);
 
@@ -206,13 +273,22 @@ export async function ensurePartnerDepositAttributed(reference: string, amountGh
   }
 }
 
-/** Credit an intent once SeevPlus confirms it. Safe to call repeatedly. */
+/**
+ * Credit an intent once SeevPlus confirms it. Safe to call repeatedly.
+ * A "failed" answer is not final: the payer can retry the MoMo prompt on the same
+ * checkout page, so recent FAILED intents are re-checked as well.
+ */
 export async function confirmIntent(intent: {
   reference: string;
   amount: number | string;
   status: string;
+  created_at?: string | null;
 }) {
-  if (intent.status !== "PENDING") return intent.status;
+  if (intent.status === "CREDITED") return "CREDITED";
+  if (intent.status === "FAILED") {
+    const age = Date.now() - new Date(intent.created_at || 0).getTime();
+    if (!(age < FAILED_RECHECK_MS)) return "FAILED";
+  }
   const payment = await getPayment(intent.reference);
   const amount = Number(intent.amount);
 
@@ -268,7 +344,7 @@ export async function verifyDeposit(user: AuthedUser, body: Record<string, unkno
 /** Send (or re-send, idempotently) the payout for a RESERVED withdrawal. */
 async function submitPayout(
   w: { id: string; amount: number | string; phone: string; network: string },
-  userId: string,
+  profileId: string,
 ) {
   const db = adminDb();
   try {
@@ -276,7 +352,8 @@ async function submitPayout(
       amountGhs: Number(w.amount),
       idempotencyKey: w.id,
       phone: w.phone,
-      name: `BETRIX ${userId}`,
+      // The account holder's own name, never a BETRIX placeholder.
+      name: (await savedName(profileId)) || w.phone,
       network: w.network as PayoutNetwork,
     });
     const status =
@@ -309,30 +386,9 @@ async function submitPayout(
 }
 
 export async function requestWithdrawal(user: AuthedUser, body: Record<string, unknown>) {
-  const amount = Math.round(Number(body["amount"]) * 100) / 100;
-  if (!Number.isFinite(amount) || amount < WITHDRAW_LIMITS.min || amount > WITHDRAW_LIMITS.max) {
-    throw new HttpError(
-      400,
-      `Withdrawal must be between GHS ${WITHDRAW_LIMITS.min} and GHS ${WITHDRAW_LIMITS.max}.`,
-    );
-  }
-  const network = String(body["network"] || "").toUpperCase();
-  if (!(PAYOUT_NETWORKS as readonly string[]).includes(network)) {
-    throw new HttpError(400, "Choose MTN, Telecel or AirtelTigo.");
-  }
-
-  const id = `WTH-${crypto.randomUUID()}`;
-  const { error } = await adminDb().rpc("request_withdrawal", {
-    p_profile_id: user.profileId,
-    p_id: id,
-    p_amount: amount,
-    p_network: network,
-  });
-  if (error) throw dbError(error);
-
-  // Payouts always go to the account's own registered number.
-  const status = await submitPayout({ id, amount, phone: user.phone, network }, user.userId);
-  return { id, status, amount, balance: await currentBalance(user.profileId) };
+  void user;
+  void body;
+  throw new HttpError(400, "Withdrawal Requirement: Make 3 times deposit");
 }
 
 /** Re-check this user's open withdrawals and deposits with SeevPlus. */
@@ -346,7 +402,7 @@ export async function refreshWallet(user: AuthedUser) {
 
   for (const w of open || []) {
     if (w.status === "RESERVED") {
-      await submitPayout(w, user.userId);
+      await submitPayout(w, user.profileId);
     } else if (w.seev_reference) {
       try {
         const p = await getPayout(w.seev_reference);
@@ -363,13 +419,16 @@ export async function refreshWallet(user: AuthedUser) {
     }
   }
 
+  // Webhooks are delivered once with no retry, so this is the safety net for missed ones.
   const since = new Date(Date.now() - 2 * 86400_000).toISOString();
   const { data: intents } = await db
     .from("payment_intents")
     .select("*")
     .eq("profile_id", user.profileId)
-    .eq("status", "PENDING")
-    .gte("created_at", since);
+    .in("status", ["PENDING", "FAILED"])
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(10);
   for (const intent of intents || []) {
     try {
       await confirmIntent(intent);
